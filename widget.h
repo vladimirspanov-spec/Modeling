@@ -2,7 +2,6 @@
 #define WIDGET_H
 
 #include <QWidget>
-#include <QJsonObject>
 #include <QMap>
 
 QT_BEGIN_NAMESPACE
@@ -24,7 +23,6 @@ class Widget : public QWidget
 public:
     explicit Widget(QWidget *parent = nullptr);
     ~Widget() override;
-    QJsonObject configuration() const;
 
 private:
     QSpinBox *addInteger(QFormLayout *form, const QString &key, const QString &label,
@@ -35,7 +33,6 @@ private:
                          const QStringList &labels, const QStringList &values, int index);
     void resetDefaults();
     void updateSummary();
-    void saveConfiguration();
     QStringList validationErrors() const;
 
     Ui::Widget *ui;

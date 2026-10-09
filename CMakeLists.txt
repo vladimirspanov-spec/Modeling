@@ -14,6 +14,8 @@ qt_add_executable(Modeling
     widget.cpp
     widget.h
     widget.ui
+    simulationwindow.cpp
+    simulationwindow.h
 )
 
 target_link_libraries(Modeling

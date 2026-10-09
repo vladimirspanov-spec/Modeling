@@ -1,21 +1,18 @@
 #include "widget.h"
 #include "ui_widget.h"
+#include "simulationwindow.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateEdit>
 #include <QDoubleSpinBox>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
-#include <QJsonArray>
-#include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRegularExpressionValidator>
-#include <QSaveFile>
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -132,15 +129,26 @@ Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget)
     layout->addWidget(status);
     auto *buttons = new QHBoxLayout;
     auto *reset = new QPushButton(tr("По умолчанию"), this);
-    auto *save = new QPushButton(tr("Сохранить параметры…"), this);
     auto *check = new QPushButton(tr("Проверить параметры"), this);
+    auto *openSimulation = new QPushButton(tr("Открыть моделирование"), this);
     buttons->addWidget(reset);
     buttons->addStretch();
     buttons->addWidget(check);
-    buttons->addWidget(save);
+    buttons->addWidget(openSimulation);
     layout->addLayout(buttons);
     connect(reset, &QPushButton::clicked, this, &Widget::resetDefaults);
-    connect(save, &QPushButton::clicked, this, &Widget::saveConfiguration);
+    connect(openSimulation, &QPushButton::clicked, this, [this] {
+        const auto errors = validationErrors();
+        if (!errors.isEmpty()) {
+            QMessageBox::warning(this, tr("Проверьте параметры"), errors.join('\n'));
+            return;
+        }
+        QList<bool> workdays;
+        for (auto *day : workingDays)
+            workdays.append(day->isChecked());
+        auto *window = new SimulationWindow(startDate->date(), integers.value("simulationDays")->value(), workdays, this);
+        window->show();
+    });
     connect(check, &QPushButton::clicked, this, [this] {
         const auto errors = validationErrors();
         if (errors.isEmpty())
@@ -242,43 +250,5 @@ void Widget::updateSummary()
         .arg(integers.value("departmentCount")->value() + 1).arg(days * 24 * 60 / step)
         .arg(startDate->date().toString("dd.MM.yyyy"), startDate->date().addDays(days).toString("dd.MM.yyyy")));
     const auto errors = validationErrors();
-    status->setText(errors.isEmpty() ? tr("Параметры корректны. Можно сохранить конфигурацию в JSON.") : errors.join('\n'));
-}
-
-QJsonObject Widget::configuration() const
-{
-    QJsonObject result{{"schemaVersion", 1}, {"startDate", startDate->date().toString(Qt::ISODate)},
-                       {"utcOffsetMinutes", 180}, {"workStart", workStart->time().toString("HH:mm")},
-                       {"workEnd", workEnd->time().toString("HH:mm")},
-                       {"seed", static_cast<double>(seed->text().toULongLong())}};
-    for (auto it = integers.cbegin(); it != integers.cend(); ++it) result.insert(it.key(), it.value()->value());
-    for (auto it = decimals.cbegin(); it != decimals.cend(); ++it) result.insert(it.key(), it.value()->value());
-    for (auto it = choices.cbegin(); it != choices.cend(); ++it) result.insert(it.key(), it.value()->currentData().toString());
-    result.insert("stepMinutes", choices.value("stepMinutes")->currentData().toInt());
-    QJsonArray days;
-    for (int i = 0; i < workingDays.size(); ++i) if (workingDays[i]->isChecked()) days.append(i + 1);
-    result.insert("workingDays", days);
-    result.insert("durationMinutes", QJsonArray{30, 60, 90, 120});
-    result.insert("durationWeights", QJsonArray{1, 1, 1, 1});
-    result.insert("roomPreset", "onePerDepartmentAndConferenceHall");
-    return result;
-}
-
-void Widget::saveConfiguration()
-{
-    const auto errors = validationErrors();
-    if (!errors.isEmpty()) {
-        QMessageBox::warning(this, tr("Проверьте параметры"), errors.join('\n'));
-        return;
-    }
-    QString path = QFileDialog::getSaveFileName(this, tr("Сохранить параметры"), "simulation-config.json", tr("JSON (*.json)"));
-    if (path.isEmpty()) return;
-    if (!path.endsWith(".json", Qt::CaseInsensitive)) path += ".json";
-    QSaveFile file(path);
-    const auto data = QJsonDocument(configuration()).toJson(QJsonDocument::Indented);
-    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
-        QMessageBox::critical(this, tr("Ошибка сохранения"), file.errorString());
-        return;
-    }
-    status->setText(tr("Параметры сохранены: %1").arg(path));
+    status->setText(errors.isEmpty() ? tr("Параметры корректны.") : errors.join('\n'));
 }
