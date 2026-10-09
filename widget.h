@@ -2,11 +2,13 @@
 #define WIDGET_H
 
 #include <QWidget>
-#include <QJsonObject>
 #include <QMap>
 
 QT_BEGIN_NAMESPACE
+<<<<<<< HEAD
 namespace Ui { class Widget; }
+=======
+>>>>>>> 19d33f3 (added calender system)
 class QFormLayout;
 class QSpinBox;
 class QDoubleSpinBox;
@@ -23,8 +25,11 @@ class Widget : public QWidget
     Q_OBJECT
 public:
     explicit Widget(QWidget *parent = nullptr);
+<<<<<<< HEAD
     ~Widget() override;
-    QJsonObject configuration() const;
+=======
+    ~Widget() override = default;
+>>>>>>> 19d33f3 (added calender system)
 
 private:
     QSpinBox *addInteger(QFormLayout *form, const QString &key, const QString &label,
@@ -35,10 +40,12 @@ private:
                          const QStringList &labels, const QStringList &values, int index);
     void resetDefaults();
     void updateSummary();
-    void saveConfiguration();
     QStringList validationErrors() const;
 
+<<<<<<< HEAD
     Ui::Widget *ui;
+=======
+>>>>>>> 19d33f3 (added calender system)
     QMap<QString, QSpinBox *> integers;
     QMap<QString, QDoubleSpinBox *> decimals;
     QMap<QString, QComboBox *> choices;

@@ -1,21 +1,21 @@
 #include "widget.h"
+<<<<<<< HEAD
 #include "ui_widget.h"
+=======
+>>>>>>> 19d33f3 (added calender system)
+#include "simulationwindow.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateEdit>
 #include <QDoubleSpinBox>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
-#include <QJsonArray>
-#include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRegularExpressionValidator>
-#include <QSaveFile>
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -23,9 +23,14 @@
 #include <QVBoxLayout>
 #include <limits>
 
+<<<<<<< HEAD
 Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget)
 {
     ui->setupUi(this);
+=======
+Widget::Widget(QWidget *parent) : QWidget(parent)
+{
+>>>>>>> 19d33f3 (added calender system)
     setWindowTitle(tr("Параметры моделирования — календарь фирмы"));
     resize(900, 760);
     auto *layout = new QVBoxLayout(this);
@@ -132,15 +137,41 @@ Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget)
     layout->addWidget(status);
     auto *buttons = new QHBoxLayout;
     auto *reset = new QPushButton(tr("По умолчанию"), this);
-    auto *save = new QPushButton(tr("Сохранить параметры…"), this);
     auto *check = new QPushButton(tr("Проверить параметры"), this);
+    auto *openSimulation = new QPushButton(tr("Открыть моделирование"), this);
     buttons->addWidget(reset);
     buttons->addStretch();
     buttons->addWidget(check);
-    buttons->addWidget(save);
+    buttons->addWidget(openSimulation);
     layout->addLayout(buttons);
     connect(reset, &QPushButton::clicked, this, &Widget::resetDefaults);
-    connect(save, &QPushButton::clicked, this, &Widget::saveConfiguration);
+    connect(openSimulation, &QPushButton::clicked, this, [this] {
+        const auto errors = validationErrors();
+        if (!errors.isEmpty()) {
+            QMessageBox::warning(this, tr("Проверьте параметры"), errors.join('\n'));
+            return;
+        }
+        QList<bool> workdays;
+        for (auto *day : workingDays)
+            workdays.append(day->isChecked());
+<<<<<<< HEAD
+        auto *window = new SimulationWindow(startDate->date(), integers.value("simulationDays")->value(), workdays, this);
+=======
+        CalendarSetup setup;
+        setup.startDate = startDate->date();
+        setup.dayCount = integers.value("simulationDays")->value();
+        setup.stepMinutes = choices.value("stepMinutes")->currentData().toInt();
+        setup.departmentCount = integers.value("departmentCount")->value();
+        setup.employeesPerDepartment = integers.value("employeesPerDepartment")->value();
+        setup.workingDays = workdays;
+        setup.workStart = workStart->time();
+        setup.workEnd = workEnd->time();
+        setup.initialMeetings = choices.value("initialCalendar")->currentData().toString() == "planningAndWeeklyMeetings";
+        setup.role = static_cast<UserRole>(choices.value("actorRole")->currentIndex());
+        auto *window = new SimulationWindow(setup, this);
+>>>>>>> 19d33f3 (added calender system)
+        window->show();
+    });
     connect(check, &QPushButton::clicked, this, [this] {
         const auto errors = validationErrors();
         if (errors.isEmpty())
@@ -155,8 +186,11 @@ Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget)
     resetDefaults();
 }
 
+<<<<<<< HEAD
 Widget::~Widget() { delete ui; }
 
+=======
+>>>>>>> 19d33f3 (added calender system)
 QSpinBox *Widget::addInteger(QFormLayout *form, const QString &key, const QString &label, int minimum, int maximum, int value)
 {
     auto *input = new QSpinBox(this);
@@ -166,7 +200,11 @@ QSpinBox *Widget::addInteger(QFormLayout *form, const QString &key, const QStrin
     input->setProperty("defaultValue", value);
     integers.insert(key, input);
     form->addRow(label, input);
+<<<<<<< HEAD
     connect(input, &QSpinBox::valueChanged, this, &Widget::updateSummary);
+=======
+    connect(input, qOverload<int>(&QSpinBox::valueChanged), this, &Widget::updateSummary);
+>>>>>>> 19d33f3 (added calender system)
     return input;
 }
 
@@ -181,7 +219,11 @@ QDoubleSpinBox *Widget::addDecimal(QFormLayout *form, const QString &key, const 
     input->setProperty("defaultValue", value);
     decimals.insert(key, input);
     form->addRow(label, input);
+<<<<<<< HEAD
     connect(input, &QDoubleSpinBox::valueChanged, this, &Widget::updateSummary);
+=======
+    connect(input, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &Widget::updateSummary);
+>>>>>>> 19d33f3 (added calender system)
     return input;
 }
 
@@ -194,7 +236,11 @@ QComboBox *Widget::addChoice(QFormLayout *form, const QString &key, const QStrin
     input->setProperty("defaultValue", index);
     choices.insert(key, input);
     form->addRow(label, input);
+<<<<<<< HEAD
     connect(input, &QComboBox::currentIndexChanged, this, &Widget::updateSummary);
+=======
+    connect(input, qOverload<int>(&QComboBox::currentIndexChanged), this, &Widget::updateSummary);
+>>>>>>> 19d33f3 (added calender system)
     return input;
 }
 
@@ -216,6 +262,12 @@ QStringList Widget::validationErrors() const
     QStringList errors;
     auto value = [this](const QString &key) { return integers.value(key)->value(); };
     if (workStart->time() >= workEnd->time()) errors << tr("Начало рабочего дня должно быть раньше конца.");
+<<<<<<< HEAD
+=======
+    if (choices.value("initialCalendar")->currentData().toString() == "planningAndWeeklyMeetings" &&
+        workStart->time().secsTo(workEnd->time()) < 3600)
+        errors << tr("Для начальных планерок и совещаний нужен рабочий день не короче часа; иначе выберите пустой календарь.");
+>>>>>>> 19d33f3 (added calender system)
     bool hasDay = false;
     for (auto *day : workingDays) hasDay |= day->isChecked();
     if (!hasDay) errors << tr("Выберите хотя бы один рабочий день.");
@@ -238,47 +290,15 @@ void Widget::updateSummary()
     const int days = integers.value("simulationDays")->value();
     const int step = choices.value("stepMinutes")->currentData().toInt();
     summary->setText(tr("Сотрудников: %1 · Помещений: %2 · Шагов за прогон: %3\nПериод: %4 00:00 — %5 00:00 (конец не включается)")
+<<<<<<< HEAD
         .arg(integers.value("departmentCount")->value() * integers.value("employeesPerDepartment")->value())
         .arg(integers.value("departmentCount")->value() + 1).arg(days * 24 * 60 / step)
         .arg(startDate->date().toString("dd.MM.yyyy"), startDate->date().addDays(days).toString("dd.MM.yyyy")));
+=======
+                         .arg(integers.value("departmentCount")->value() * integers.value("employeesPerDepartment")->value())
+                         .arg(integers.value("departmentCount")->value() + 1).arg(days * 24 * 60 / step)
+                         .arg(startDate->date().toString("dd.MM.yyyy"), startDate->date().addDays(days).toString("dd.MM.yyyy")));
+>>>>>>> 19d33f3 (added calender system)
     const auto errors = validationErrors();
-    status->setText(errors.isEmpty() ? tr("Параметры корректны. Можно сохранить конфигурацию в JSON.") : errors.join('\n'));
-}
-
-QJsonObject Widget::configuration() const
-{
-    QJsonObject result{{"schemaVersion", 1}, {"startDate", startDate->date().toString(Qt::ISODate)},
-                       {"utcOffsetMinutes", 180}, {"workStart", workStart->time().toString("HH:mm")},
-                       {"workEnd", workEnd->time().toString("HH:mm")},
-                       {"seed", static_cast<double>(seed->text().toULongLong())}};
-    for (auto it = integers.cbegin(); it != integers.cend(); ++it) result.insert(it.key(), it.value()->value());
-    for (auto it = decimals.cbegin(); it != decimals.cend(); ++it) result.insert(it.key(), it.value()->value());
-    for (auto it = choices.cbegin(); it != choices.cend(); ++it) result.insert(it.key(), it.value()->currentData().toString());
-    result.insert("stepMinutes", choices.value("stepMinutes")->currentData().toInt());
-    QJsonArray days;
-    for (int i = 0; i < workingDays.size(); ++i) if (workingDays[i]->isChecked()) days.append(i + 1);
-    result.insert("workingDays", days);
-    result.insert("durationMinutes", QJsonArray{30, 60, 90, 120});
-    result.insert("durationWeights", QJsonArray{1, 1, 1, 1});
-    result.insert("roomPreset", "onePerDepartmentAndConferenceHall");
-    return result;
-}
-
-void Widget::saveConfiguration()
-{
-    const auto errors = validationErrors();
-    if (!errors.isEmpty()) {
-        QMessageBox::warning(this, tr("Проверьте параметры"), errors.join('\n'));
-        return;
-    }
-    QString path = QFileDialog::getSaveFileName(this, tr("Сохранить параметры"), "simulation-config.json", tr("JSON (*.json)"));
-    if (path.isEmpty()) return;
-    if (!path.endsWith(".json", Qt::CaseInsensitive)) path += ".json";
-    QSaveFile file(path);
-    const auto data = QJsonDocument(configuration()).toJson(QJsonDocument::Indented);
-    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
-        QMessageBox::critical(this, tr("Ошибка сохранения"), file.errorString());
-        return;
-    }
-    status->setText(tr("Параметры сохранены: %1").arg(path));
+    status->setText(errors.isEmpty() ? tr("Параметры корректны.") : errors.join('\n'));
 }

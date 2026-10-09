@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
+<<<<<<< HEAD
  <class>Widget</class>
  <widget class="QWidget" name="Widget">
+=======
+ <class>simulationwindow</class>
+ <widget class="QWidget" name="simulationwindow">
+>>>>>>> 19d33f3 (added calender system)
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -11,7 +16,11 @@
    </rect>
   </property>
   <property name="windowTitle">
+<<<<<<< HEAD
    <string>Widget</string>
+=======
+   <string>simulationwindow</string>
+>>>>>>> 19d33f3 (added calender system)
   </property>
  </widget>
  <resources/>
