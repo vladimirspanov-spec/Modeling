@@ -1,8 +1,4 @@
 #include "widget.h"
-<<<<<<< HEAD
-#include "ui_widget.h"
-=======
->>>>>>> 19d33f3 (added calender system)
 #include "simulationwindow.h"
 
 #include <QCheckBox>
@@ -23,14 +19,8 @@
 #include <QVBoxLayout>
 #include <limits>
 
-<<<<<<< HEAD
-Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget)
-{
-    ui->setupUi(this);
-=======
 Widget::Widget(QWidget *parent) : QWidget(parent)
 {
->>>>>>> 19d33f3 (added calender system)
     setWindowTitle(tr("Параметры моделирования — календарь фирмы"));
     resize(900, 760);
     auto *layout = new QVBoxLayout(this);
@@ -154,9 +144,6 @@ Widget::Widget(QWidget *parent) : QWidget(parent)
         QList<bool> workdays;
         for (auto *day : workingDays)
             workdays.append(day->isChecked());
-<<<<<<< HEAD
-        auto *window = new SimulationWindow(startDate->date(), integers.value("simulationDays")->value(), workdays, this);
-=======
         CalendarSetup setup;
         setup.startDate = startDate->date();
         setup.dayCount = integers.value("simulationDays")->value();
@@ -169,7 +156,6 @@ Widget::Widget(QWidget *parent) : QWidget(parent)
         setup.initialMeetings = choices.value("initialCalendar")->currentData().toString() == "planningAndWeeklyMeetings";
         setup.role = static_cast<UserRole>(choices.value("actorRole")->currentIndex());
         auto *window = new SimulationWindow(setup, this);
->>>>>>> 19d33f3 (added calender system)
         window->show();
     });
     connect(check, &QPushButton::clicked, this, [this] {
@@ -186,11 +172,6 @@ Widget::Widget(QWidget *parent) : QWidget(parent)
     resetDefaults();
 }
 
-<<<<<<< HEAD
-Widget::~Widget() { delete ui; }
-
-=======
->>>>>>> 19d33f3 (added calender system)
 QSpinBox *Widget::addInteger(QFormLayout *form, const QString &key, const QString &label, int minimum, int maximum, int value)
 {
     auto *input = new QSpinBox(this);
@@ -200,11 +181,7 @@ QSpinBox *Widget::addInteger(QFormLayout *form, const QString &key, const QStrin
     input->setProperty("defaultValue", value);
     integers.insert(key, input);
     form->addRow(label, input);
-<<<<<<< HEAD
-    connect(input, &QSpinBox::valueChanged, this, &Widget::updateSummary);
-=======
     connect(input, qOverload<int>(&QSpinBox::valueChanged), this, &Widget::updateSummary);
->>>>>>> 19d33f3 (added calender system)
     return input;
 }
 
@@ -219,11 +196,7 @@ QDoubleSpinBox *Widget::addDecimal(QFormLayout *form, const QString &key, const 
     input->setProperty("defaultValue", value);
     decimals.insert(key, input);
     form->addRow(label, input);
-<<<<<<< HEAD
-    connect(input, &QDoubleSpinBox::valueChanged, this, &Widget::updateSummary);
-=======
     connect(input, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &Widget::updateSummary);
->>>>>>> 19d33f3 (added calender system)
     return input;
 }
 
@@ -236,11 +209,7 @@ QComboBox *Widget::addChoice(QFormLayout *form, const QString &key, const QStrin
     input->setProperty("defaultValue", index);
     choices.insert(key, input);
     form->addRow(label, input);
-<<<<<<< HEAD
-    connect(input, &QComboBox::currentIndexChanged, this, &Widget::updateSummary);
-=======
     connect(input, qOverload<int>(&QComboBox::currentIndexChanged), this, &Widget::updateSummary);
->>>>>>> 19d33f3 (added calender system)
     return input;
 }
 
@@ -262,12 +231,9 @@ QStringList Widget::validationErrors() const
     QStringList errors;
     auto value = [this](const QString &key) { return integers.value(key)->value(); };
     if (workStart->time() >= workEnd->time()) errors << tr("Начало рабочего дня должно быть раньше конца.");
-<<<<<<< HEAD
-=======
     if (choices.value("initialCalendar")->currentData().toString() == "planningAndWeeklyMeetings" &&
         workStart->time().secsTo(workEnd->time()) < 3600)
         errors << tr("Для начальных планерок и совещаний нужен рабочий день не короче часа; иначе выберите пустой календарь.");
->>>>>>> 19d33f3 (added calender system)
     bool hasDay = false;
     for (auto *day : workingDays) hasDay |= day->isChecked();
     if (!hasDay) errors << tr("Выберите хотя бы один рабочий день.");
@@ -290,15 +256,9 @@ void Widget::updateSummary()
     const int days = integers.value("simulationDays")->value();
     const int step = choices.value("stepMinutes")->currentData().toInt();
     summary->setText(tr("Сотрудников: %1 · Помещений: %2 · Шагов за прогон: %3\nПериод: %4 00:00 — %5 00:00 (конец не включается)")
-<<<<<<< HEAD
-        .arg(integers.value("departmentCount")->value() * integers.value("employeesPerDepartment")->value())
-        .arg(integers.value("departmentCount")->value() + 1).arg(days * 24 * 60 / step)
-        .arg(startDate->date().toString("dd.MM.yyyy"), startDate->date().addDays(days).toString("dd.MM.yyyy")));
-=======
                          .arg(integers.value("departmentCount")->value() * integers.value("employeesPerDepartment")->value())
                          .arg(integers.value("departmentCount")->value() + 1).arg(days * 24 * 60 / step)
                          .arg(startDate->date().toString("dd.MM.yyyy"), startDate->date().addDays(days).toString("dd.MM.yyyy")));
->>>>>>> 19d33f3 (added calender system)
     const auto errors = validationErrors();
     status->setText(errors.isEmpty() ? tr("Параметры корректны.") : errors.join('\n'));
 }

@@ -1,52 +1,13 @@
-<<<<<<< HEAD
-cmake_minimum_required(VERSION 3.19)
-project(Modeling LANGUAGES CXX)
-=======
 cmake_minimum_required(VERSION 3.5)
 
 project(Modeling VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
->>>>>>> 19d33f3 (added calender system)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-<<<<<<< HEAD
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets)
-
-qt_standard_project_setup()
-
-qt_add_executable(Modeling
-    WIN32 MACOSX_BUNDLE
-    main.cpp
-    widget.cpp
-    widget.h
-    widget.ui
-    simulationwindow.cpp
-    simulationwindow.h
-)
-
-target_link_libraries(Modeling
-    PRIVATE
-        Qt::Core
-        Qt::Widgets
-)
-
-install(TARGETS Modeling
-    BUNDLE  DESTINATION .
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-)
-
-qt_generate_deploy_app_script(
-    TARGET Modeling
-    OUTPUT_SCRIPT deploy_script
-    NO_UNSUPPORTED_PLATFORM_ERROR
-)
-install(SCRIPT ${deploy_script})
-=======
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
 
@@ -129,4 +90,3 @@ install(TARGETS Modeling
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(Modeling)
 endif()
->>>>>>> 19d33f3 (added calender system)

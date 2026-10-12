@@ -1,17 +1,6 @@
 #ifndef SIMULATIONWINDOW_H
 #define SIMULATIONWINDOW_H
 
-<<<<<<< HEAD
-#include <QDate>
-#include <QList>
-#include <QWidget>
-
-class SimulationWindow : public QWidget
-{
-public:
-    explicit SimulationWindow(const QDate &startDate, int dayCount,
-                              const QList<bool> &workingDays, QWidget *parent = nullptr);
-=======
 #include "src/services/calendarsetup.h"
 #include <QWidget>
 
@@ -46,7 +35,6 @@ private:
     QDateEdit *to_;
     QPushButton *stepButton_;
     QPushButton *addButton_;
->>>>>>> 19d33f3 (added calender system)
 };
 
 #endif
