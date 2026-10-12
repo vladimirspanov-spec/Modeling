@@ -14,7 +14,13 @@ enum class Importance { Low, Medium, High };
 enum class UserRole { Employee, Manager, Secretary };
 
 struct Department { int id; QString name; };
-struct Employee { int id; QString name; int departmentId; };
+struct Employee {
+    int id; // Stable internal key: calendar references survive transfers.
+    QString name;
+    int departmentId;
+    QString publicId; // Organization_sequence, never reused during a run.
+    bool available = true;
+};
 struct Room { int id; QString name; std::optional<int> departmentId; };
 struct CompanyCatalog {
     QMap<int, Department> departments;
@@ -45,6 +51,9 @@ struct CalendarEvent {
     quint64 scheduleVersion = 1;
     EventData data;
     EventStatus status = EventStatus::Planned;
+    QMap<int, QString> participantCodes;
+    QMap<int, int> participantDepartments;
+    QString organizerCode;
 };
 
 enum class CalendarAction { Created, Updated, Cancelled, Started, Completed };
@@ -54,6 +63,7 @@ struct CalendarRecord {
     CalendarAction action;
     int actorId; // 0 for automatic lifecycle transitions.
     CalendarEvent snapshot;
+    QString actorCode;
 };
 
 enum class CalendarError { None, InvalidData, NotFound, PermissionDenied, InvalidState, Conflict, InvalidTime };

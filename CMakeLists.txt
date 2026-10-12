@@ -17,6 +17,8 @@ add_library(calendar_core
     src/services/calendarservice.cpp
     src/services/calendarsetup.h
     src/services/calendarsetup.cpp
+    src/simulation/simulationengine.h
+    src/simulation/simulationengine.cpp
 )
 target_include_directories(calendar_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(calendar_core PUBLIC Qt${QT_VERSION_MAJOR}::Core)
@@ -60,6 +62,9 @@ if(BUILD_TESTING)
     add_executable(calendarservice_test tests/calendarservice_test.cpp)
     target_link_libraries(calendarservice_test PRIVATE calendar_core Qt${QT_VERSION_MAJOR}::Test)
     add_test(NAME calendarservice COMMAND calendarservice_test)
+    add_executable(simulationengine_test tests/simulationengine_test.cpp)
+    target_link_libraries(simulationengine_test PRIVATE calendar_core Qt${QT_VERSION_MAJOR}::Test)
+    add_test(NAME simulationengine COMMAND simulationengine_test)
     add_executable(calendarwindow_test tests/calendarwindow_test.cpp simulationwindow.cpp widget.cpp widget.h)
     target_link_libraries(calendarwindow_test PRIVATE calendar_core Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Test)
     add_test(NAME calendarwindow COMMAND calendarwindow_test)

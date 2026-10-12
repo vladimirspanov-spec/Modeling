@@ -78,11 +78,11 @@ Widget::Widget(QWidget *parent) : QWidget(parent)
 
     auto *scenario = page(tr("Сценарий"));
     addChoice(scenario, "initialCalendar", tr("Начальный календарь"), {tr("Планерки и недельные совещания"), tr("Пустой календарь")}, {"planningAndWeeklyMeetings", "empty"}, 0);
-    addDecimal(scenario, "requestRatePerWorkday", tr("Новых заявок за рабочий день, на фирму"), 6);
+    addDecimal(scenario, "requestRatePerWorkday", tr("Случайных событий за рабочий день, на фирму"), 6);
     addDecimal(scenario, "changeRatePerWorkday", tr("Изменений за рабочий день, на фирму"), 1);
-    addInteger(scenario, "leadTimeMinWorkdays", tr("Минимум рабочих дней до события"), 0, 365, 1);
-    addInteger(scenario, "leadTimeMaxWorkdays", tr("Максимум рабочих дней до события"), 0, 365, 5);
-    auto *duration = new QLabel(tr("Длительности: 30, 60, 90, 120 минут с равными весами."), this);
+    addInteger(scenario, "leadTimeMinWorkdays", tr("Дальний срок: минимум рабочих дней"), 0, 365, 1);
+    addInteger(scenario, "leadTimeMaxWorkdays", tr("Дальний срок: максимум рабочих дней"), 0, 365, 5);
+    auto *duration = new QLabel(tr("19 типов событий: встречи, поручения, кадровые изменения и происшествия. Длительность зависит от типа события и состояния участников."), this);
     duration->setWordWrap(true);
     scenario->addRow(duration);
     addInteger(scenario, "participantsMin", tr("Минимум участников"), 1, 900000, 2);
@@ -155,13 +155,22 @@ Widget::Widget(QWidget *parent) : QWidget(parent)
         setup.workEnd = workEnd->time();
         setup.initialMeetings = choices.value("initialCalendar")->currentData().toString() == "planningAndWeeklyMeetings";
         setup.role = static_cast<UserRole>(choices.value("actorRole")->currentIndex());
+        setup.seed = seed->text().toUInt();
+        setup.requestRatePerWorkday = decimals.value("requestRatePerWorkday")->value();
+        setup.changeRatePerWorkday = decimals.value("changeRatePerWorkday")->value();
+        setup.animationTickMs = integers.value("animationTickMs")->value();
+        setup.participantsMin = integers.value("participantsMin")->value();
+        setup.participantsMax = integers.value("participantsMax")->value();
+        setup.leadTimeMinWorkdays = integers.value("leadTimeMinWorkdays")->value();
+        setup.leadTimeMaxWorkdays = integers.value("leadTimeMaxWorkdays")->value();
+        setup.importanceWeights = {decimals.value("importanceLowWeight")->value(), decimals.value("importanceMediumWeight")->value(), decimals.value("importanceHighWeight")->value()};
         auto *window = new SimulationWindow(setup, this);
         window->show();
     });
     connect(check, &QPushButton::clicked, this, [this] {
         const auto errors = validationErrors();
         if (errors.isEmpty())
-            status->setText(tr("Параметры корректны. Конфигурация готова; движок моделирования пока не подключен."));
+            status->setText(tr("Параметры корректны. Можно запускать моделирование."));
         else
             QMessageBox::warning(this, tr("Проверьте параметры"), errors.join('\n'));
     });

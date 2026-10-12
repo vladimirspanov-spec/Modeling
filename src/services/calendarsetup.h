@@ -13,6 +13,15 @@ struct CalendarSetup {
     QTime workEnd{18, 0};
     bool initialMeetings = true;
     UserRole role = UserRole::Secretary;
+    quint32 seed = 42;
+    double requestRatePerWorkday = 6;
+    double changeRatePerWorkday = 1;
+    int animationTickMs = 250;
+    int participantsMin = 2;
+    int participantsMax = 8;
+    int leadTimeMinWorkdays = 1;
+    int leadTimeMaxWorkdays = 5;
+    QVector<double> importanceWeights{0.5, 0.35, 0.15};
 };
 
 QDateTime modelDateTime(const QDate &date, const QTime &time = QTime(0, 0));
