@@ -14,6 +14,7 @@ class QTimer;
 class QTableWidget;
 class QTabWidget;
 class QCheckBox;
+class QGraphicsScene;
 
 class SimulationWindow : public QWidget
 {
@@ -32,6 +33,7 @@ private:
     void updateSpeed();
     void refreshJournalAndState();
     void transferParticipant();
+    void refreshOffice();
     CalendarSetup setup_;
     SimulationEngine engine_;
     UserContext actor_;
@@ -56,6 +58,8 @@ private:
     QTabWidget *tabs_;
     QCheckBox *showPlanned_;
     QLabel *actorLabel_;
+    QGraphicsScene *officeScene_;
+    QString officeCatalogSignature_;
     int displayedLogCount_ = 0;
 };
 

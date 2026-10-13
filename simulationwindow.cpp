@@ -14,8 +14,14 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QFontMetrics>
+#include <QPainter>
+#include <QTextLayout>
 #include <QFrame>
 #include <QGridLayout>
+#include <QGraphicsOpacityEffect>
+#include <QGraphicsScene>
+#include <QGraphicsView>
+#include <QGraphicsTextItem>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -41,20 +47,66 @@ QString participantText(const QVector<int> &participants, const QMap<int, QStrin
     for (int id : participants) ids.append(codes.value(id));
     return ids.join(", ");
 }
-QString cardTitle(const QString &title, const QFontMetrics &metrics) {
-    QStringList lines;
-    QString line;
-    for (const auto &word : title.simplified().split(' ', Qt::SkipEmptyParts)) {
-        const auto next = line.isEmpty() ? word : line + ' ' + word;
-        if (!line.isEmpty() && metrics.horizontalAdvance(next) > 135) {
-            lines.append(line);
-            line.clear();
-        }
-        line = line.isEmpty() ? metrics.elidedText(word, Qt::ElideRight, 135) : line + ' ' + word;
+// Keep QPushButton semantics (keyboard activation and accessible text), while
+// drawing a card whose text is measured against its actual available width.
+class CalendarEventCard : public QPushButton {
+public:
+    CalendarEventCard(const QString &time, const QString &title, EventStatus status, QWidget *parent)
+        : QPushButton(parent), time_(time), title_(title.simplified()), status_(status) {
+        setText(time + '\n' + title + '\n' + statusName(status));
+        setAccessibleName(text());
+        setCursor(Qt::PointingHandCursor);
+        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+        setFixedHeight(106);
+        setAttribute(Qt::WA_Hover);
     }
-    if (!line.isEmpty()) lines.append(line);
-    return lines.join('\n');
-}
+    QSize sizeHint() const override { return {160, 106}; }
+    QSize minimumSizeHint() const override { return {0, 106}; }
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const bool active = status_ == EventStatus::InProgress;
+        const bool archived = status_ == EventStatus::Completed || status_ == EventStatus::Cancelled;
+        const QColor accent = active ? QColor("#258454") : archived ? QColor("#8290a3") : QColor("#5277c3");
+        const QColor background = active ? QColor("#edf8f1") : archived ? QColor("#f3f4f6") : QColor("#eff4fc");
+        painter.setBrush(isDown() ? background.darker(108) : underMouse() ? background.darker(103) : background);
+        painter.setPen(QPen(hasFocus() ? accent : QColor("#dce3ed"), hasFocus() ? 2 : 1));
+        painter.drawRoundedRect(QRectF(rect()).adjusted(1, 1, -1, -1), 7, 7);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(accent);
+        painter.drawRoundedRect(QRectF(5, 10, 3, height() - 20), 1.5, 1.5);
+        const int left = 16, available = qMax(0, width() - left - 10);
+        QFont heading = font();
+        heading.setBold(true);
+        painter.setFont(heading);
+        painter.setPen(QColor("#23344d"));
+        painter.drawText(QRect(left, 9, available, 20), Qt::AlignLeft | Qt::AlignVCenter,
+                         QFontMetrics(heading).elidedText(time_, Qt::ElideRight, available));
+        painter.setFont(font());
+        QTextLayout titleLayout(title_, font());
+        QTextOption option;
+        option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+        titleLayout.setTextOption(option);
+        titleLayout.beginLayout();
+        for (int row = 0; row < 2; ++row) {
+            auto line = titleLayout.createLine();
+            if (!line.isValid()) break;
+            line.setLineWidth(available);
+            const auto fragment = row == 1 ? title_.mid(line.textStart())
+                                          : title_.mid(line.textStart(), line.textLength());
+            painter.drawText(QRect(left, 33 + row * 21, available, 21), Qt::AlignLeft | Qt::AlignVCenter,
+                             fontMetrics().elidedText(fragment, Qt::ElideRight, available));
+        }
+        titleLayout.endLayout();
+        painter.setPen(accent);
+        painter.drawText(QRect(left, 79, available, 20), Qt::AlignLeft | Qt::AlignVCenter,
+                         fontMetrics().elidedText(statusName(status_), Qt::ElideRight, available));
+    }
+private:
+    QString time_, title_;
+    EventStatus status_;
+};
 QString errorText(const CalendarResult &result) {
     QString message = result.message;
     if (!result.conflicts.isEmpty()) {
@@ -164,6 +216,22 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
     calendarLayout->addWidget(scroll_, 1);
     tabs_->addTab(calendarPage, tr("Календарь и архив"));
 
+    auto *officePage = new QWidget(this);
+    auto *officeLayout = new QVBoxLayout(officePage);
+    auto *officeHelp = new QLabel(tr("Схема офиса · В комнатах показаны участники текущих мероприятий. Подписи — ID сотрудников, цвет — их отдел."), officePage);
+    officeHelp->setWordWrap(true);
+    officeLayout->addWidget(officeHelp);
+    officeScene_ = new QGraphicsScene(officePage);
+    officeScene_->setObjectName("officeScene");
+    auto *officeView = new QGraphicsView(officeScene_, officePage);
+    officeView->setObjectName("officeView");
+    officeView->setRenderHint(QPainter::Antialiasing);
+    officeView->setBackgroundBrush(QColor("#f1f5f9"));
+    officeView->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    officeView->setDragMode(QGraphicsView::ScrollHandDrag);
+    officeLayout->addWidget(officeView, 1);
+    tabs_->addTab(officePage, tr("Офис"));
+
     auto *peoplePage = new QWidget(this);
     auto *peopleLayout = new QVBoxLayout(peoplePage);
     participants_ = table({tr("ID"), tr("Участник"), tr("Организация / отдел"), tr("Состояние"), tr("Напряжение"), tr("Навык")}, "participantsTable");
@@ -264,10 +332,11 @@ void SimulationWindow::refreshCalendar()
     calendar->setObjectName("simulationCalendar");
     auto *grid = new QGridLayout(calendar);
     grid->setSpacing(8);
+    grid->setAlignment(Qt::AlignTop | Qt::AlignLeft);
     const QStringList weekdays{tr("пн"), tr("вт"), tr("ср"), tr("чт"), tr("пт"), tr("сб"), tr("вс")};
     for (int column = 0; column < 7; ++column) {
-        grid->setColumnStretch(column, 1);
         auto *header = new QLabel(weekdays[column], calendar);
+        header->setFixedHeight(24);
         header->setAlignment(Qt::AlignCenter);
         grid->addWidget(header, 0, column);
     }
@@ -281,35 +350,53 @@ void SimulationWindow::refreshCalendar()
         auto *day = new QFrame(calendar);
         day->setObjectName("calendarDay");
         day->setProperty("date", date);
-        day->setMinimumSize(130, 150);
-        day->setStyleSheet("QFrame#calendarDay { background: white; border: 1px solid #c9c9c9; }");
+        // A day is past only after its end in the simulation's UTC+03:00 clock.
+        if (end <= engine_.calendar().modelTime()) {
+            auto *opacity = new QGraphicsOpacityEffect(day);
+            opacity->setOpacity(0.55);
+            day->setGraphicsEffect(opacity);
+        }
+        day->setFixedSize(160, 210);
+        day->setStyleSheet("QFrame#calendarDay { background: #ffffff; border: 1px solid #dce3ed; border-radius: 9px; }");
         auto *dayLayout = new QVBoxLayout(day);
-        dayLayout->setContentsMargins(3, 3, 3, 3);
+        dayLayout->setContentsMargins(7, 7, 7, 7);
+        dayLayout->setSpacing(6);
         auto *header = new QLabel(date.toString("dd.MM.yyyy"), day);
         header->setObjectName("dayHeader");
         header->setAlignment(Qt::AlignCenter);
-        header->setStyleSheet(QString("background: %1; color: white; font-weight: bold; padding: 4px;")
-            .arg(setup_.workingDays.value(weekday) ? "#000000" : "#c62828"));
+        header->setStyleSheet(QString("background: %1; color: white; font-weight: bold; padding: 6px; border-radius: 5px;")
+            .arg(setup_.workingDays.value(weekday) ? "#34445c" : "#ad4650"));
         dayLayout->addWidget(header);
+        auto *eventsScroll = new QScrollArea(day);
+        eventsScroll->setObjectName("dayEventsScroll");
+        eventsScroll->setWidgetResizable(true);
+        eventsScroll->setFrameShape(QFrame::NoFrame);
+        eventsScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        eventsScroll->setStyleSheet("QScrollArea#dayEventsScroll, QScrollArea#dayEventsScroll > QWidget > QWidget { background: transparent; }");
+        auto *events = new QWidget;
+        auto *eventsLayout = new QVBoxLayout(events);
+        eventsLayout->setContentsMargins(0, 0, 0, 0);
+        eventsLayout->setSpacing(6);
+        eventsLayout->setSizeConstraint(QLayout::SetMinimumSize);
+        eventsScroll->setWidget(events);
+        dayLayout->addWidget(eventsScroll, 1);
         for (const auto &event : result.events) {
             if (event.data.start >= end || event.data.end <= begin) continue;
-            auto *button = new QPushButton(day);
+            const auto time = tr("%1–%2")
+                .arg(std::max(event.data.start, begin).toOffsetFromUtc(10800).toString("HH:mm"))
+                .arg(event.data.end >= end ? QStringLiteral("24:00") : event.data.end.toOffsetFromUtc(10800).toString("HH:mm"));
+            auto *button = new CalendarEventCard(time, event.data.title, event.status, events);
             button->setObjectName("calendarEvent");
             button->setProperty("eventId", QVariant::fromValue<qulonglong>(event.id));
-            button->setText(tr("%1–%2\n%3\n%4")
-                .arg(std::max(event.data.start, begin).toOffsetFromUtc(10800).toString("HH:mm"))
-                .arg(event.data.end >= end ? QStringLiteral("24:00") : event.data.end.toOffsetFromUtc(10800).toString("HH:mm"))
-                .arg(cardTitle(event.data.title, button->fontMetrics())).arg(statusName(event.status)));
             button->setToolTip(tr("ID: %1\n%2 — %3\nУчастники: %4\n%5\n%6")
                 .arg(event.id).arg(event.data.start.toString(Qt::ISODate), event.data.end.toString(Qt::ISODate))
                 .arg(participantText(event.data.participantIds, event.participantCodes))
                 .arg(event.data.roomId ? engine_.calendar().catalog().rooms.value(*event.data.roomId).name : tr("Без помещения"))
                 .arg(event.data.title));
-            button->setStyleSheet(event.status == EventStatus::InProgress ? "background: #d2efdb; color: #102a18;" : "background: #e9eef7; color: #182438;");
             connect(button, &QPushButton::clicked, this, [this, id = event.id] { editEvent(id); });
-            dayLayout->addWidget(button);
+            eventsLayout->addWidget(button);
         }
-        dayLayout->addStretch();
+        eventsLayout->addStretch();
         grid->addWidget(day, (offset + index) / 7 + 1, weekday);
     }
     scroll_->setWidget(calendar); // Scroll area deletes the previous presentation, never the events.
@@ -434,6 +521,7 @@ void SimulationWindow::editEvent(std::optional<EventId> id)
 
 void SimulationWindow::refreshJournalAndState()
 {
+    refreshOffice();
     const auto &entries = engine_.log();
     const bool follow = journal_->verticalScrollBar()->value() == journal_->verticalScrollBar()->maximum();
     const bool added = displayedLogCount_ < entries.size();
@@ -524,4 +612,84 @@ void SimulationWindow::transferParticipant()
         if (!result.ok()) QMessageBox::warning(this, tr("Перевод"), errorText(result));
     }
     refreshCalendar();
+}
+
+void SimulationWindow::refreshOffice()
+{
+    const auto &catalog = engine_.calendar().catalog();
+    QString signature = QStringLiteral("rooms:");
+    QMap<int, QVector<Employee>> occupants;
+    QMap<int, QString> roomEvents;
+    for (const auto &room : catalog.rooms) signature += QString::number(room.id) + QLatin1Char(';');
+    CalendarFilter filter;
+    filter.status = EventStatus::InProgress;
+    for (const auto &event : engine_.calendar().calendar(filter).events) {
+        if (!event.data.roomId) continue;
+        const int roomId = *event.data.roomId;
+        roomEvents.insert(roomId, event.data.title);
+        signature += QStringLiteral("event:%1:%2:%3;").arg(event.id).arg(roomId).arg(event.data.title);
+        for (int participantId : event.data.participantIds) {
+            const auto person = catalog.employees.value(participantId);
+            occupants[roomId].append(person);
+            signature += QStringLiteral("person:%1:%2:%3;").arg(person.id).arg(person.departmentId).arg(person.publicId);
+        }
+    }
+    if (signature == officeCatalogSignature_) return;
+    officeCatalogSignature_ = signature;
+    officeScene_->clear(); // The scene owns its graphics items, including their text children.
+    const qreal margin = 24;
+    const qreal gap = 24;
+    const qreal roomWidth = 300;
+    const int columns = 3;
+    const int peopleColumns = 5;
+    int largestDepartment = std::max(setup_.employeesPerDepartment, setup_.participantsMax);
+    for (const auto &people : occupants) largestDepartment = std::max(largestDepartment, int(people.size()));
+    const qreal roomHeight = std::max(180, 110 + ((largestDepartment + peopleColumns - 1) / peopleColumns) * 52);
+    int index = 0;
+    for (const auto &room : catalog.rooms) {
+        const qreal x = margin + (index % columns) * (roomWidth + gap);
+        const qreal y = margin + (index / columns) * (roomHeight + gap);
+        ++index;
+        const QColor color = room.departmentId
+            ? QColor::fromHsv(((*room.departmentId - 1) * 47) % 360, 130, 185)
+            : QColor("#64748b");
+        auto *outline = officeScene_->addRect(x, y, roomWidth, roomHeight,
+            QPen(color, 2), QBrush(Qt::white));
+        outline->setData(0, room.id);
+        outline->setToolTip(room.name);
+        auto *title = new QGraphicsTextItem(outline);
+        QFont titleFont = font(); titleFont.setBold(true);
+        title->setFont(titleFont);
+        title->setDefaultTextColor(QColor("#1e293b"));
+        title->setTextWidth(roomWidth - 24);
+        title->setPlainText(room.departmentId ? catalog.departments.value(*room.departmentId).name : room.name);
+        title->setPos(x + 12, y + 8);
+        auto *eventLabel = new QGraphicsTextItem(outline);
+        const QString eventTitle = roomEvents.value(room.id);
+        eventLabel->setPlainText(eventTitle.isEmpty() ? tr("Нет текущих мероприятий")
+            : QFontMetrics(eventLabel->font()).elidedText(eventTitle, Qt::ElideRight, int(roomWidth - 24)));
+        eventLabel->setToolTip(eventTitle);
+        eventLabel->setDefaultTextColor(QColor("#64748b"));
+        eventLabel->setPos(x + 12, y + 44);
+        int personIndex = 0;
+        for (const auto &person : occupants.value(room.id)) {
+            const qreal px = x + 12 + (personIndex % peopleColumns) * 56;
+            const qreal py = y + 88 + (personIndex / peopleColumns) * 52;
+            ++personIndex;
+            const QColor personColor = QColor::fromHsv(((person.departmentId - 1) * 47) % 360, 130, 185);
+            auto *circle = officeScene_->addEllipse(px, py, 44, 44, QPen(personColor.darker(120)), QBrush(personColor.lighter(175)));
+            circle->setData(1, room.id);
+            circle->setData(0, person.id);
+            circle->setToolTip(tr("%1 · %2").arg(person.publicId, person.name));
+            auto *label = new QGraphicsTextItem(person.publicId, circle);
+            QFont labelFont = font(); labelFont.setPointSize(9);
+            label->setFont(labelFont);
+            label->setDefaultTextColor(QColor("#1e293b"));
+            const auto bounds = label->boundingRect();
+            label->setScale(std::min(qreal(1), 40 / bounds.width()));
+            label->setPos(px + (44 - bounds.width() * label->scale()) / 2,
+                py + (44 - bounds.height() * label->scale()) / 2);
+        }
+    }
+    officeScene_->setSceneRect(officeScene_->itemsBoundingRect().adjusted(-margin, -margin, margin, margin));
 }

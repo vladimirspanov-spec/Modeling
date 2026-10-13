@@ -13,6 +13,14 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTimer>
+#include <QTabWidget>
+#include <QFrame>
+#include <QGraphicsOpacityEffect>
+#include <QGraphicsScene>
+#include <QGraphicsEllipseItem>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QWheelEvent>
 
 namespace {
 CalendarSetup setup(bool preset = false) {
@@ -169,6 +177,42 @@ private slots:
         });
         window.findChild<QPushButton *>("calendarEvent")->click();
     }
+    void officeShowsOnlyCurrentEventParticipants() {
+        SimulationWindow window(setup());
+        window.show();
+        auto *scene = window.findChild<QGraphicsScene *>("officeScene");
+        QVERIFY(scene);
+        auto circles = [scene] {
+            QList<QGraphicsEllipseItem *> result;
+            for (auto *item : scene->items())
+                if (auto *circle = qgraphicsitem_cast<QGraphicsEllipseItem *>(item)) result.append(circle);
+            return result;
+        };
+        QVERIFY(circles().isEmpty());
+        const int hallId = window.calendarService().catalog().rooms.lastKey();
+        inDialog([hallId](QDialog *dialog) {
+            auto *room = dialog->findChild<QComboBox *>("eventRoom");
+            QVERIFY(room);
+            room->setCurrentIndex(room->findData(hallId));
+            fillEvent(dialog, "Conference", QTime(9, 10), QTime(9, 40));
+        });
+        window.findChild<QPushButton *>("addEvent")->click();
+        QTRY_COMPARE(window.calendarService().calendar().events.size(), 1);
+        QVERIFY(circles().isEmpty());
+        for (int i = 0; i < 19; ++i) window.findChild<QPushButton *>("stepCalendar")->click();
+        QCOMPARE(window.calendarService().event(1)->status, EventStatus::InProgress);
+        QCOMPARE(circles().size(), window.calendarService().event(1)->data.participantIds.size());
+        QVERIFY(!circles().isEmpty());
+        for (auto *circle : circles()) QCOMPARE(circle->data(1).toInt(), hallId);
+        // Calendar filters must not hide the current occupants of the office.
+        window.findChild<QComboBox *>("departmentFilter")->setCurrentIndex(2);
+        QVERIFY(!circles().isEmpty());
+        window.findChild<QPushButton *>("stepCalendar")->click();
+        QCOMPARE(window.calendarService().event(1)->status, EventStatus::Completed);
+        QVERIFY(circles().isEmpty());
+        window.findChild<QPushButton *>("resetSimulation")->click();
+        QVERIFY(circles().isEmpty());
+    }
     void stepStartsCompletesAndArchives() {
         SimulationWindow window(setup());
         window.show();
@@ -187,6 +231,70 @@ private slots:
         window.findChild<QComboBox *>("calendarScope")->setCurrentIndex(1);
         QCOMPARE(window.findChildren<QPushButton *>("calendarEvent").size(), 1);
         QCOMPARE(window.calendarService().history(1).last().timestamp.time(), QTime(9, 40));
+    }
+    void pastDaysDimAtModelMidnightAndReset() {
+        auto config = setup();
+        config.stepMinutes = 60;
+        SimulationWindow window(config);
+        auto dayFor = [&](QDate date) -> QFrame * {
+            for (auto *day : window.findChildren<QFrame *>("calendarDay"))
+                if (day->property("date").toDate() == date) return day;
+            return nullptr;
+        };
+        auto *step = window.findChild<QPushButton *>("stepCalendar");
+        for (int hour = 0; hour < 23; ++hour) step->click();
+        QCOMPARE(window.calendarService().modelTime(), modelDateTime(config.startDate, QTime(23, 0)));
+        QVERIFY(dayFor(config.startDate));
+        QVERIFY(!dayFor(config.startDate)->graphicsEffect());
+        step->click();
+        QCOMPARE(window.calendarService().modelTime(), modelDateTime(config.startDate.addDays(1)));
+        auto *opacity = qobject_cast<QGraphicsOpacityEffect *>(dayFor(config.startDate)->graphicsEffect());
+        QVERIFY(opacity);
+        QCOMPARE(opacity->opacity(), 0.55);
+        QVERIFY(dayFor(config.startDate)->isEnabled());
+        QVERIFY(!dayFor(config.startDate.addDays(1))->graphicsEffect());
+        QVERIFY(!dayFor(config.startDate.addDays(2))->graphicsEffect());
+        window.findChild<QPushButton *>("resetSimulation")->click();
+        QVERIFY(!dayFor(config.startDate)->graphicsEffect());
+    }
+    void fixedDaysScrollWithLongTitles() {
+        SimulationWindow window(setup());
+        window.show();
+        auto *tabs = window.findChild<QTabWidget *>();
+        for (int index = 0; index < tabs->count(); ++index)
+            if (tabs->tabText(index).startsWith(QString::fromUtf8("Календарь"))) tabs->setCurrentIndex(index);
+        const QString title = QString::fromUtf8("Очень длинное название события для проверки переноса и размещения карточки ")
+            + QString(120, QLatin1Char('W'));
+        for (int hour = 6; hour < 11; ++hour) {
+            inDialog([title, hour](QDialog *dialog) {
+                fillEvent(dialog, title, QTime(hour, 0), QTime(hour + 1, 0));
+            });
+            window.findChild<QPushButton *>("addEvent")->click();
+            QTRY_COMPARE(window.findChildren<QPushButton *>("calendarEvent").size(), hour - 5);
+        }
+        for (int width : {1120, 1500}) {
+            window.resize(width, 760);
+            QCoreApplication::processEvents();
+            for (auto *card : window.findChildren<QPushButton *>("calendarEvent")) {
+                QTRY_VERIFY(card->parentWidget()->rect().contains(card->geometry()));
+                QVERIFY(card->width() < 250);
+                QVERIFY(card->toolTip().contains(title));
+            }
+        }
+        for (auto *day : window.findChildren<QFrame *>("calendarDay"))
+            QCOMPARE(day->size(), QSize(160, 210));
+        auto *card = window.findChild<QPushButton *>("calendarEvent");
+        auto *eventsScroll = card->parentWidget()->parentWidget()->parentWidget();
+        auto *area = qobject_cast<QScrollArea *>(eventsScroll);
+        QVERIFY(area);
+        QTRY_VERIFY(area->verticalScrollBar()->maximum() > 0);
+        const auto position = area->viewport()->rect().center();
+        QWheelEvent wheel(position, area->viewport()->mapToGlobal(position), QPoint(), QPoint(0, -120),
+                          Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+        QApplication::sendEvent(area->viewport(), &wheel);
+        QVERIFY(area->verticalScrollBar()->value() > 0);
+        QCOMPARE(area->parentWidget()->size(), QSize(160, 210));
+        QVERIFY(window.grab().save(QDir::temp().filePath("modeling-calendar-cards-preview.png")));
     }
     void loadPresetAndParameterHandoff() {
         Widget parameters;
