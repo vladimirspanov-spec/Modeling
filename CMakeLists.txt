@@ -29,6 +29,8 @@ set(PROJECT_SOURCES
         widget.h
         simulationwindow.cpp
         simulationwindow.h
+        officescene.cpp
+        officescene.h
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -65,7 +67,7 @@ if(BUILD_TESTING)
     add_executable(simulationengine_test tests/simulationengine_test.cpp)
     target_link_libraries(simulationengine_test PRIVATE calendar_core Qt${QT_VERSION_MAJOR}::Test)
     add_test(NAME simulationengine COMMAND simulationengine_test)
-    add_executable(calendarwindow_test tests/calendarwindow_test.cpp simulationwindow.cpp widget.cpp widget.h)
+    add_executable(calendarwindow_test tests/calendarwindow_test.cpp simulationwindow.cpp officescene.cpp widget.cpp widget.h)
     target_link_libraries(calendarwindow_test PRIVATE calendar_core Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Test)
     add_test(NAME calendarwindow COMMAND calendarwindow_test)
     set_tests_properties(calendarwindow PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

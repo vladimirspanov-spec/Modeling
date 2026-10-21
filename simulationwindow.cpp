@@ -1,4 +1,5 @@
 #include "simulationwindow.h"
+#include "officescene.h"
 
 #include <QComboBox>
 #include <QCheckBox>
@@ -218,7 +219,7 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
 
     auto *officePage = new QWidget(this);
     auto *officeLayout = new QVBoxLayout(officePage);
-    auto *officeHelp = new QLabel(tr("Схема офиса · В комнатах показаны участники текущих мероприятий. Подписи — ID сотрудников, цвет — их отдел."), officePage);
+    auto *officeHelp = new QLabel(tr("План офиса · Сотрудники работают в своих отделах, уходят на встречи и в командировки. Заболевшие показаны отдельно."), officePage);
     officeHelp->setWordWrap(true);
     officeLayout->addWidget(officeHelp);
     officeScene_ = new QGraphicsScene(officePage);
@@ -229,8 +230,33 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
     officeView->setBackgroundBrush(QColor("#f1f5f9"));
     officeView->setAlignment(Qt::AlignTop | Qt::AlignLeft);
     officeView->setDragMode(QGraphicsView::ScrollHandDrag);
+    auto *officeTools = new QHBoxLayout;
+    auto *fitOffice = new QPushButton(tr("Вписать схему"), officePage);
+    fitOffice->setObjectName("fitOffice");
+    auto *zoomOutOffice = new QPushButton(tr("−"), officePage);
+    auto *zoomInOffice = new QPushButton(tr("+"), officePage);
+    zoomOutOffice->setToolTip(tr("Уменьшить схему"));
+    zoomInOffice->setToolTip(tr("Увеличить схему"));
+    zoomOutOffice->setFixedWidth(36);
+    zoomInOffice->setFixedWidth(36);
+    officeTools->addStretch();
+    officeTools->addWidget(zoomOutOffice);
+    officeTools->addWidget(zoomInOffice);
+    officeTools->addWidget(fitOffice);
+    officeLayout->addLayout(officeTools);
+    connect(fitOffice, &QPushButton::clicked, officeView, [officeView] {
+        officeView->fitInView(officeView->scene()->sceneRect(), Qt::KeepAspectRatio);
+    });
+    connect(zoomOutOffice, &QPushButton::clicked, officeView, [officeView] { officeView->scale(0.8, 0.8); });
+    connect(zoomInOffice, &QPushButton::clicked, officeView, [officeView] { officeView->scale(1.25, 1.25); });
     officeLayout->addWidget(officeView, 1);
     tabs_->addTab(officePage, tr("Офис"));
+    connect(tabs_, &QTabWidget::currentChanged, officeView, [this, officePage, officeView] {
+        if (tabs_->currentWidget() != officePage) return;
+        QTimer::singleShot(0, officeView, [officeView] {
+            officeView->fitInView(officeView->scene()->sceneRect(), Qt::KeepAspectRatio);
+        });
+    });
 
     auto *peoplePage = new QWidget(this);
     auto *peopleLayout = new QVBoxLayout(peoplePage);
@@ -616,80 +642,16 @@ void SimulationWindow::transferParticipant()
 
 void SimulationWindow::refreshOffice()
 {
-    const auto &catalog = engine_.calendar().catalog();
-    QString signature = QStringLiteral("rooms:");
-    QMap<int, QVector<Employee>> occupants;
-    QMap<int, QString> roomEvents;
-    for (const auto &room : catalog.rooms) signature += QString::number(room.id) + QLatin1Char(';');
-    CalendarFilter filter;
-    filter.status = EventStatus::InProgress;
-    for (const auto &event : engine_.calendar().calendar(filter).events) {
-        if (!event.data.roomId) continue;
-        const int roomId = *event.data.roomId;
-        roomEvents.insert(roomId, event.data.title);
-        signature += QStringLiteral("event:%1:%2:%3;").arg(event.id).arg(roomId).arg(event.data.title);
-        for (int participantId : event.data.participantIds) {
-            const auto person = catalog.employees.value(participantId);
-            occupants[roomId].append(person);
-            signature += QStringLiteral("person:%1:%2:%3;").arg(person.id).arg(person.departmentId).arg(person.publicId);
-        }
-    }
+    const auto &calendar = engine_.calendar();
+    QString signature = QStringLiteral("office:");
+    for (const auto &room : calendar.catalog().rooms)
+        signature += QStringLiteral("r%1:%2;").arg(room.id).arg(calendar.roomAvailable(room.id));
+    for (const auto &person : calendar.catalog().employees)
+        signature += QStringLiteral("p%1:%2:%3:%4;").arg(person.id).arg(person.departmentId).arg(person.publicId).arg(person.available);
+    CalendarFilter filter; filter.status = EventStatus::InProgress;
+    for (const auto &event : calendar.calendar(filter).events)
+        signature += QStringLiteral("e%1:%2;").arg(event.id).arg(event.version);
     if (signature == officeCatalogSignature_) return;
     officeCatalogSignature_ = signature;
-    officeScene_->clear(); // The scene owns its graphics items, including their text children.
-    const qreal margin = 24;
-    const qreal gap = 24;
-    const qreal roomWidth = 300;
-    const int columns = 3;
-    const int peopleColumns = 5;
-    int largestDepartment = std::max(setup_.employeesPerDepartment, setup_.participantsMax);
-    for (const auto &people : occupants) largestDepartment = std::max(largestDepartment, int(people.size()));
-    const qreal roomHeight = std::max(180, 110 + ((largestDepartment + peopleColumns - 1) / peopleColumns) * 52);
-    int index = 0;
-    for (const auto &room : catalog.rooms) {
-        const qreal x = margin + (index % columns) * (roomWidth + gap);
-        const qreal y = margin + (index / columns) * (roomHeight + gap);
-        ++index;
-        const QColor color = room.departmentId
-            ? QColor::fromHsv(((*room.departmentId - 1) * 47) % 360, 130, 185)
-            : QColor("#64748b");
-        auto *outline = officeScene_->addRect(x, y, roomWidth, roomHeight,
-            QPen(color, 2), QBrush(Qt::white));
-        outline->setData(0, room.id);
-        outline->setToolTip(room.name);
-        auto *title = new QGraphicsTextItem(outline);
-        QFont titleFont = font(); titleFont.setBold(true);
-        title->setFont(titleFont);
-        title->setDefaultTextColor(QColor("#1e293b"));
-        title->setTextWidth(roomWidth - 24);
-        title->setPlainText(room.departmentId ? catalog.departments.value(*room.departmentId).name : room.name);
-        title->setPos(x + 12, y + 8);
-        auto *eventLabel = new QGraphicsTextItem(outline);
-        const QString eventTitle = roomEvents.value(room.id);
-        eventLabel->setPlainText(eventTitle.isEmpty() ? tr("Нет текущих мероприятий")
-            : QFontMetrics(eventLabel->font()).elidedText(eventTitle, Qt::ElideRight, int(roomWidth - 24)));
-        eventLabel->setToolTip(eventTitle);
-        eventLabel->setDefaultTextColor(QColor("#64748b"));
-        eventLabel->setPos(x + 12, y + 44);
-        int personIndex = 0;
-        for (const auto &person : occupants.value(room.id)) {
-            const qreal px = x + 12 + (personIndex % peopleColumns) * 56;
-            const qreal py = y + 88 + (personIndex / peopleColumns) * 52;
-            ++personIndex;
-            const QColor personColor = QColor::fromHsv(((person.departmentId - 1) * 47) % 360, 130, 185);
-            auto *circle = officeScene_->addEllipse(px, py, 44, 44, QPen(personColor.darker(120)), QBrush(personColor.lighter(175)));
-            circle->setData(1, room.id);
-            circle->setData(0, person.id);
-            circle->setToolTip(tr("%1 · %2").arg(person.publicId, person.name));
-            auto *label = new QGraphicsTextItem(person.publicId, circle);
-            QFont labelFont = font(); labelFont.setPointSize(9);
-            label->setFont(labelFont);
-            label->setDefaultTextColor(QColor("#1e293b"));
-            const auto bounds = label->boundingRect();
-            label->setScale(std::min(qreal(1), 40 / bounds.width()));
-            label->setPos(px + (44 - bounds.width() * label->scale()) / 2,
-                py + (44 - bounds.height() * label->scale()) / 2);
-        }
-    }
-    officeScene_->setSceneRect(officeScene_->itemsBoundingRect().adjusted(-margin, -margin, margin, margin));
+    populateOfficeScene(*officeScene_, calendar);
 }

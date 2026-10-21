@@ -1,4 +1,5 @@
 #include "simulationwindow.h"
+#include "officescene.h"
 #include "widget.h"
 #include <QtTest>
 #include <QComboBox>
@@ -177,7 +178,7 @@ private slots:
         });
         window.findChild<QPushButton *>("calendarEvent")->click();
     }
-    void officeShowsOnlyCurrentEventParticipants() {
+    void officeMovesParticipantsBetweenHomeAndMeeting() {
         SimulationWindow window(setup());
         window.show();
         auto *scene = window.findChild<QGraphicsScene *>("officeScene");
@@ -188,7 +189,9 @@ private slots:
                 if (auto *circle = qgraphicsitem_cast<QGraphicsEllipseItem *>(item)) result.append(circle);
             return result;
         };
-        QVERIFY(circles().isEmpty());
+        QCOMPARE(circles().size(), window.calendarService().catalog().employees.size());
+        for (auto *circle : circles())
+            QCOMPARE(circle->data(1).toInt(), window.calendarService().catalog().employees.value(circle->data(0).toInt()).departmentId);
         const int hallId = window.calendarService().catalog().rooms.lastKey();
         inDialog([hallId](QDialog *dialog) {
             auto *room = dialog->findChild<QComboBox *>("eventRoom");
@@ -198,20 +201,122 @@ private slots:
         });
         window.findChild<QPushButton *>("addEvent")->click();
         QTRY_COMPARE(window.calendarService().calendar().events.size(), 1);
-        QVERIFY(circles().isEmpty());
+        for (auto *circle : circles()) QVERIFY(circle->data(1).toInt() != hallId);
         for (int i = 0; i < 19; ++i) window.findChild<QPushButton *>("stepCalendar")->click();
         QCOMPARE(window.calendarService().event(1)->status, EventStatus::InProgress);
-        QCOMPARE(circles().size(), window.calendarService().event(1)->data.participantIds.size());
-        QVERIFY(!circles().isEmpty());
-        for (auto *circle : circles()) QCOMPARE(circle->data(1).toInt(), hallId);
+        QCOMPARE(circles().size(), window.calendarService().catalog().employees.size());
+        int inHall = 0;
+        for (auto *circle : circles()) {
+            const bool attending = window.calendarService().event(1)->data.participantIds.contains(circle->data(0).toInt());
+            QCOMPARE(circle->data(1).toInt() == hallId, attending);
+            if (attending) ++inHall;
+        }
+        QCOMPARE(inHall, window.calendarService().event(1)->data.participantIds.size());
         // Calendar filters must not hide the current occupants of the office.
         window.findChild<QComboBox *>("departmentFilter")->setCurrentIndex(2);
         QVERIFY(!circles().isEmpty());
         window.findChild<QPushButton *>("stepCalendar")->click();
         QCOMPARE(window.calendarService().event(1)->status, EventStatus::Completed);
-        QVERIFY(circles().isEmpty());
+        for (auto *circle : circles()) QVERIFY(circle->data(1).toInt() != hallId);
         window.findChild<QPushButton *>("resetSimulation")->click();
-        QVERIFY(circles().isEmpty());
+        for (auto *circle : circles()) QVERIFY(circle->data(1).toInt() != hallId);
+    }
+    void officeSeparatesWorkplacesAndMeetings() {
+        auto config = setup();
+        CalendarService calendar(makeCompanyCatalog(config), modelDateTime(config.startDate), modelDateTime(config.startDate.addDays(config.dayCount)));
+        QGraphicsScene scene;
+        const UserContext actor{1, UserRole::Secretary, {}};
+        auto employeeZones = [&] {
+            populateOfficeScene(scene, calendar);
+            QMap<int, QString> result;
+            for (auto *item : scene.items())
+                if (item->data(2).toString() == "employee") result.insert(item->data(0).toInt(), item->data(3).toString());
+            return result;
+        };
+        auto zones = employeeZones();
+        QCOMPARE(zones.size(), calendar.catalog().employees.size());
+        for (const auto &zone : zones) QCOMPARE(zone, QString("work"));
+        int workZones = 0, meetingZones = 0;
+        const int hall = calendar.catalog().rooms.lastKey();
+        for (auto *item : scene.items()) {
+            const auto kind = item->data(2).toString();
+            if (kind == "workZone" || kind == "meetingZone") {
+                QVERIFY(item->data(0).toInt() != hall);
+                if (kind == "workZone") ++workZones; else ++meetingZones;
+            }
+        }
+        QCOMPARE(workZones, config.departmentCount);
+        QCOMPARE(meetingZones, config.departmentCount);
+        EventData meeting;
+        meeting.title = "Department meeting"; meeting.type = EventType::Planning;
+        meeting.start = modelDateTime(config.startDate, QTime(9, 0)); meeting.end = meeting.start.addSecs(3600);
+        meeting.roomId = 1; meeting.participantIds = {1, config.employeesPerDepartment + 1}; meeting.organizerId = 1;
+        QVERIFY(calendar.createEvent(meeting, actor).ok());
+        QCOMPARE(employeeZones().value(1), QString("work"));
+        QVERIFY(calendar.advanceTo(meeting.start).ok());
+        zones = employeeZones();
+        QCOMPARE(zones.value(1), QString("meeting"));
+        QCOMPARE(zones.value(config.employeesPerDepartment + 1), QString("meeting"));
+        QCOMPARE(zones.value(2), QString("work"));
+        QMap<QString, QRectF> firstRoomZones;
+        for (auto *item : scene.items())
+            if (item->data(0).toInt() == 1 && (item->data(2) == "workZone" || item->data(2) == "meetingZone"))
+                firstRoomZones.insert(item->data(2).toString(), item->sceneBoundingRect());
+        for (auto *item : scene.items()) {
+            if (item->data(2) != "employee" || item->data(1).toInt() != 1) continue;
+            const auto key = item->data(3) == "meeting" ? "meetingZone" : "workZone";
+            QVERIFY(firstRoomZones.value(key).contains(item->sceneBoundingRect()));
+        }
+        QVERIFY(calendar.advanceTo(meeting.end).ok());
+        zones = employeeZones();
+        QCOMPARE(zones.value(1), QString("work"));
+        QCOMPARE(zones.value(config.employeesPerDepartment + 1), QString("work"));
+        QCOMPARE(zones.size(), calendar.catalog().employees.size());
+    }
+    void officeSicknessTripsRecoveryAndRoomRepair() {
+        auto config = setup();
+        CalendarService calendar(makeCompanyCatalog(config), modelDateTime(config.startDate), modelDateTime(config.startDate.addDays(config.dayCount)));
+        QGraphicsScene scene;
+        const UserContext secretary{1, UserRole::Secretary, {}};
+        auto locations = [&] {
+            populateOfficeScene(scene, calendar);
+            QMap<int, int> result;
+            for (auto *item : scene.items()) {
+                if (item->data(2).toString() != "employee") continue;
+                const int id = item->data(0).toInt();
+                if (result.contains(id)) return QMap<int, int>{};
+                result.insert(id, item->data(1).toInt());
+            }
+            return result;
+        };
+        QCOMPARE(locations().size(), calendar.catalog().employees.size());
+        QVERIFY(calendar.setEmployeeAvailable(2, false, secretary).ok());
+        QCOMPARE(locations().value(2), OfficeLocation::Sick);
+        bool hasSickMarker = false;
+        for (auto *item : scene.items())
+            if (item->data(2).toString() == "employee" && item->data(0).toInt() == 2)
+                hasSickMarker = item->toolTip().contains(QString::fromUtf8("Болеет"));
+        QVERIFY(hasSickMarker);
+        EventData trip;
+        trip.title = "Business trip"; trip.type = EventType::BusinessTrip;
+        trip.start = modelDateTime(config.startDate, QTime(9, 0)); trip.end = trip.start.addSecs(3600);
+        trip.participantIds = {1}; trip.organizerId = 1;
+        QVERIFY(calendar.createEvent(trip, secretary).ok());
+        QCOMPARE(locations().value(1), 1); // A future trip does not move its participant.
+        QVERIFY(calendar.advanceTo(trip.start).ok());
+        QCOMPARE(locations().value(1), OfficeLocation::Outside);
+        QCOMPARE(locations().value(2), OfficeLocation::Sick);
+        QVERIFY(calendar.advanceTo(trip.end).ok());
+        QCOMPARE(locations().value(1), 1);
+        QVERIFY(calendar.setEmployeeAvailable(2, true, secretary).ok());
+        QCOMPARE(locations().value(2), 1);
+        QVERIFY(calendar.setRoomAvailable(1, false, secretary).ok());
+        QCOMPARE(locations().value(1), OfficeLocation::Corridor);
+        QVERIFY(calendar.setRoomAvailable(1, true, secretary).ok());
+        QCOMPARE(locations().value(1), 1);
+        QVERIFY(calendar.transferEmployee(1, 2, secretary).ok());
+        QCOMPARE(locations().value(1), 2);
+        QCOMPARE(locations().size(), calendar.catalog().employees.size());
     }
     void stepStartsCompletesAndArchives() {
         SimulationWindow window(setup());
