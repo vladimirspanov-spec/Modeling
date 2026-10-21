@@ -22,6 +22,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QWheelEvent>
+#include <QVariantAnimation>
 
 namespace {
 CalendarSetup setup(bool preset = false) {
@@ -220,6 +221,89 @@ private slots:
         for (auto *circle : circles()) QVERIFY(circle->data(1).toInt() != hallId);
         window.findChild<QPushButton *>("resetSimulation")->click();
         for (auto *circle : circles()) QVERIFY(circle->data(1).toInt() != hallId);
+    }
+    void officeAnimationUsesOrthogonalRoutesAndRespectsBudget() {
+        auto config = setup();
+        CalendarService calendar(makeCompanyCatalog(config), modelDateTime(config.startDate), modelDateTime(config.startDate.addDays(config.dayCount)));
+        QGraphicsScene scene;
+        OfficeAnimator animator(scene);
+        animator.update(calendar, 0);
+        const UserContext actor{1, UserRole::Secretary, {}};
+        EventData meeting;
+        meeting.title = "Animated meeting"; meeting.type = EventType::Planning;
+        meeting.start = modelDateTime(config.startDate, QTime(9, 0)); meeting.end = meeting.start.addSecs(3600);
+        meeting.roomId = 1; meeting.participantIds = {1, config.employeesPerDepartment + 1}; meeting.organizerId = 1;
+        QVERIFY(calendar.createEvent(meeting, actor).ok());
+        QVERIFY(calendar.advanceTo(meeting.start).ok());
+        animator.update(calendar, 200);
+        auto animations = animator.findChildren<QVariantAnimation *>();
+        QVERIFY(!animations.isEmpty());
+        bool hasInternalRoute = false, hasCorridorRoute = false;
+        for (auto *animation : animations) {
+            QVERIFY(animation->duration() <= 200);
+            const auto points = animation->property("waypoints").toList();
+            QVERIFY(points.size() >= 2);
+            qreal travelled = 0;
+            for (int i = 1; i < points.size(); ++i) {
+                const auto before = points[i - 1].toPointF(), after = points[i].toPointF();
+                QVERIFY(before.x() == after.x() || before.y() == after.y());
+                travelled += std::abs(before.x() - after.x()) + std::abs(before.y() - after.y());
+            }
+            QVERIFY(travelled > 0);
+            if (animation->property("employeeId").toInt() == 1) hasInternalRoute = true;
+            if (animation->property("employeeId").toInt() == config.employeesPerDepartment + 1) {
+                hasCorridorRoute = true;
+                QVERIFY(points.size() >= 6);
+            }
+        }
+        QVERIFY(hasInternalRoute); QVERIFY(hasCorridorRoute);
+        animator.pause();
+        auto *animation = animations.first();
+        QCOMPARE(animation->state(), QAbstractAnimation::Paused);
+        animation->setCurrentTime(animation->duration() / 3);
+        const qreal progress = animation->currentValue().toReal();
+        animator.retime(40);
+        QCOMPARE(animation->duration(), 40);
+        QCOMPARE(animation->state(), QAbstractAnimation::Paused);
+        QCOMPARE(animation->currentValue().toReal(), progress);
+        animator.resume();
+        QCOMPARE(animation->state(), QAbstractAnimation::Running);
+        QTest::qWait(70);
+        for (auto *motion : animator.findChildren<QVariantAnimation *>())
+            QCOMPARE(motion->state(), QAbstractAnimation::Stopped);
+        for (auto *item : scene.items())
+            if (item->data(2) == "employee") QVERIFY(QLineF(QPointF(), item->pos()).length() < 0.001);
+        QVERIFY(calendar.advanceTo(meeting.end).ok());
+        animator.update(calendar, 100);
+        animator.finish(); // A rapid next step must finish all previous movement before rebuilding.
+        QVERIFY(animator.findChildren<QVariantAnimation *>().isEmpty());
+        for (auto *item : scene.items())
+            if (item->data(2) == "employee") QVERIFY(QLineF(QPointF(), item->pos()).length() < 0.001);
+    }
+    void officeAnimationFollowsWindowSpeedPauseAndReset() {
+        auto config = setup(); config.animationTickMs = 1000;
+        SimulationWindow window(config);
+        window.show();
+        inDialog([](QDialog *dialog) { fillEvent(dialog, "Moving", QTime(9, 10), QTime(10, 40)); });
+        window.findChild<QPushButton *>("addEvent")->click();
+        QTRY_COMPARE(window.calendarService().calendar().events.size(), 1);
+        for (int i = 0; i < 19; ++i) window.findChild<QPushButton *>("stepCalendar")->click();
+        auto *scene = window.findChild<QGraphicsScene *>("officeScene");
+        auto animations = scene->findChildren<QVariantAnimation *>("officeMovement");
+        QVERIFY(!animations.isEmpty());
+        for (auto *motion : animations) QVERIFY(motion->duration() <= 800);
+        auto *speed = window.findChild<QComboBox *>("simulationSpeed");
+        speed->setCurrentIndex(speed->findData(5.0));
+        for (auto *motion : animations) QVERIFY(motion->duration() <= 160);
+        window.findChild<QPushButton *>("startSimulation")->click();
+        window.findChild<QPushButton *>("pauseSimulation")->click();
+        for (auto *motion : animations) QCOMPARE(motion->state(), QAbstractAnimation::Paused);
+        window.findChild<QPushButton *>("startSimulation")->click();
+        for (auto *motion : animations) QCOMPARE(motion->state(), QAbstractAnimation::Running);
+        window.findChild<QPushButton *>("resetSimulation")->click();
+        QVERIFY(scene->findChildren<QVariantAnimation *>("officeMovement").isEmpty());
+        for (auto *item : scene->items())
+            if (item->data(2) == "employee") QCOMPARE(item->pos(), QPointF());
     }
     void officeSeparatesWorkplacesAndMeetings() {
         auto config = setup();

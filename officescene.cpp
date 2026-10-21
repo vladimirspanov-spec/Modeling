@@ -4,6 +4,9 @@
 #include <QFontMetrics>
 #include <QPainterPath>
 #include <QPen>
+#include <QVariantAnimation>
+#include <QElapsedTimer>
+#include <cmath>
 #include <algorithm>
 
 namespace {
@@ -53,7 +56,7 @@ void populateOfficeScene(QGraphicsScene &scene, const CalendarService &calendar)
         else
             occupants[location].append(person);
     }
-    const qreal margin = 28, gap = 16, roomWidth = 240, pitch = 54;
+    const qreal margin = 28, gap = 16, roomWidth = 294, pitch = 54;
     const int peopleColumns = 4;
     const int columns = std::max(1, (int(catalog.rooms.size()) + 1) / 2);
     int maxPeople = 8;
@@ -104,7 +107,7 @@ void populateOfficeScene(QGraphicsScene &scene, const CalendarService &calendar)
             meetingZone->setData(0, room.id); meetingZone->setData(2, "meetingZone");
             const qreal divider = meetingArea.top();
             // A partition with a passage on the right keeps both parts connected.
-            scene.addLine(x + 2, divider, x + roomWidth - 48, divider, QPen(QColor("#94a3b8"), 1.5, Qt::DashLine));
+            scene.addLine(x + 2, divider, x + roomWidth - 72, divider, QPen(QColor("#94a3b8"), 1.5, Qt::DashLine));
             text(scene, QObject::tr("Рабочие места"), x + 10, workArea.top() + 2, roomWidth - 20, ink, true);
             text(scene, QObject::tr("%1 сотрудников").arg(occupants.value(room.id).size()),
                  x + 10, workArea.top() + 26, roomWidth - 20, muted);
@@ -168,6 +171,12 @@ void populateOfficeScene(QGraphicsScene &scene, const CalendarService &calendar)
             auto *circle = scene.addEllipse(x, y, 42, 42, QPen(color.darker(120), 1.5), QBrush(color.lighter(175)));
             circle->setData(0, person.id); circle->setData(1, group.key()); circle->setData(2, "employee");
             circle->setData(3, meeting ? "meeting" : dividedRoom ? "work" : "other");
+            // Navigation points are centers; a clear aisle leads through each partition and door.
+            const qreal aisleX = group.key() > 0 ? areas.value(group.key()).x() + roomWidth - 45
+                : group.key() == OfficeLocation::Corridor ? x + 21 : sideX - 32;
+            circle->setData(4, QPointF(aisleX, y + 21));
+            circle->setData(5, QPointF(aisleX, corridorY + corridorHeight / 2));
+            circle->setZValue(10);
             const QString state = sick ? QObject::tr("Болеет") : group.key() == OfficeLocation::Outside ? QObject::tr("В командировке")
                 : activities.contains(person.id) ? activities.value(person.id) : QObject::tr("На рабочем месте");
             circle->setToolTip(QStringLiteral("%1 · %2\n%3\n%4").arg(person.publicId, person.name,
@@ -190,7 +199,117 @@ void populateOfficeScene(QGraphicsScene &scene, const CalendarService &calendar)
     drawPeople(occupants, false);
     drawPeople(meetingOccupants, true);
     const qreal footerY = top + buildingHeight + 24;
-    text(scene, QObject::tr("Цвет — отдел сотрудника · ID внутри кружка · Б — болезнь · Переходы между зонами пока мгновенные"),
+    text(scene, QObject::tr("Цвет — отдел сотрудника · ID внутри кружка · Б — болезнь · Движение через проходы и коридор"),
          margin, footerY, sideX + sideWidth - margin, muted);
     scene.setSceneRect(scene.itemsBoundingRect().adjusted(-20, -20, 20, 20));
+}
+
+namespace {
+struct OfficeSeat {
+    QPointF center;
+    QPointF aisle;
+    QPointF corridor;
+    int location;
+    QString section;
+};
+OfficeSeat seat(QGraphicsItem *item) {
+    return {item->sceneBoundingRect().center(), item->data(4).toPointF(), item->data(5).toPointF(),
+        item->data(1).toInt(), item->data(3).toString()};
+}
+QVector<QPointF> route(const OfficeSeat &from, const OfficeSeat &to) {
+    QVector<QPointF> points{from.center};
+    auto append = [&](QPointF point) { if (points.last() != point) points.append(point); };
+    if (from.location == to.location && from.section == to.section) {
+        append(QPointF(to.center.x(), from.center.y()));
+    } else {
+        append(from.aisle);
+        if (from.location != to.location) {
+            append(from.corridor);
+            append(QPointF(to.corridor.x(), from.corridor.y()));
+            append(to.corridor);
+        }
+        append(QPointF(to.aisle.x(), points.last().y()));
+        append(to.aisle);
+    }
+    append(to.center);
+    return points;
+}
+qreal distance(QPointF a, QPointF b) { return std::abs(a.x() - b.x()) + std::abs(a.y() - b.y()); }
+QPointF along(const QVector<QPointF> &points, qreal travelled) {
+    for (int i = 1; i < points.size(); ++i) {
+        const qreal length = distance(points[i - 1], points[i]);
+        if (travelled <= length) return points[i - 1] + (points[i] - points[i - 1]) * (travelled / length);
+        travelled -= length;
+    }
+    return points.last();
+}
+}
+
+OfficeAnimator::OfficeAnimator(QGraphicsScene &scene) : QObject(&scene), scene_(scene) {}
+
+void OfficeAnimator::finish()
+{
+    for (auto *animation : findChildren<QVariantAnimation *>(QString(), Qt::FindDirectChildrenOnly)) {
+        animation->setCurrentTime(animation->duration());
+        animation->stop();
+        delete animation;
+    }
+}
+void OfficeAnimator::pause()
+{
+    for (auto *animation : findChildren<QVariantAnimation *>())
+        if (animation->state() == QAbstractAnimation::Running) animation->pause();
+}
+void OfficeAnimator::resume()
+{
+    for (auto *animation : findChildren<QVariantAnimation *>())
+        if (animation->state() == QAbstractAnimation::Paused) animation->resume();
+}
+void OfficeAnimator::retime(int remainingMs)
+{
+    if (remainingMs <= 0) { finish(); return; }
+    for (auto *animation : findChildren<QVariantAnimation *>()) {
+        if (animation->state() == QAbstractAnimation::Stopped) continue;
+        const bool paused = animation->state() == QAbstractAnimation::Paused;
+        const QVariant current = animation->currentValue();
+        animation->stop();
+        animation->setStartValue(current);
+        animation->setDuration(remainingMs);
+        animation->start();
+        if (paused) animation->pause();
+    }
+}
+void OfficeAnimator::update(const CalendarService &calendar, int durationMs)
+{
+    finish(); // No callback may reference items that populateOfficeScene is about to delete.
+    QMap<int, OfficeSeat> previous;
+    for (auto *item : scene_.items())
+        if (item->data(2) == "employee") previous.insert(item->data(0).toInt(), seat(item));
+    QElapsedTimer preparation; preparation.start();
+    populateOfficeScene(scene_, calendar);
+    durationMs = std::max(0, durationMs - int(preparation.elapsed()));
+    if (durationMs == 0) return;
+    for (auto *item : scene_.items()) {
+        if (item->data(2) != "employee" || !previous.contains(item->data(0).toInt())) continue;
+        const auto destination = seat(item);
+        const auto points = route(previous.value(item->data(0).toInt()), destination);
+        qreal length = 0;
+        QVariantList waypoints;
+        for (const auto &point : points) waypoints.append(point);
+        for (int i = 1; i < points.size(); ++i) length += distance(points[i - 1], points[i]);
+        if (length == 0) continue;
+        auto *animation = new QVariantAnimation(this);
+        animation->setObjectName("officeMovement");
+        animation->setProperty("employeeId", item->data(0));
+        animation->setProperty("waypoints", waypoints);
+        animation->setDuration(durationMs);
+        animation->setStartValue(qreal(0)); animation->setEndValue(length);
+        connect(animation, &QVariantAnimation::valueChanged, this, [item, points, destination](const QVariant &value) {
+            item->setPos(along(points, value.toReal()) - destination.center);
+        });
+        connect(animation, &QVariantAnimation::finished, this, [item] { item->setPos(QPointF()); });
+        // Text and sickness badges are children of the circle and move with it.
+        item->setPos(points.first() - destination.center);
+        animation->start();
+    }
 }

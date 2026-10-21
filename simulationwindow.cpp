@@ -129,6 +129,7 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
     layout->setSpacing(8);
     timer_ = new QTimer(this);
     timer_->setObjectName("simulationTimer");
+    timer_->setTimerType(Qt::PreciseTimer);
     auto *actions = new QHBoxLayout;
     startButton_ = new QPushButton(tr("▶ Запустить"), this);
     startButton_->setObjectName("startSimulation");
@@ -224,6 +225,7 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
     officeLayout->addWidget(officeHelp);
     officeScene_ = new QGraphicsScene(officePage);
     officeScene_->setObjectName("officeScene");
+    officeAnimator_ = new OfficeAnimator(*officeScene_);
     auto *officeView = new QGraphicsView(officeScene_, officePage);
     officeView->setObjectName("officeView");
     officeView->setRenderHint(QPainter::Antialiasing);
@@ -298,17 +300,19 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
 void SimulationWindow::start()
 {
     if (engine_.finished()) return;
+    officeAnimator_->resume();
     timer_->start();
     refreshCalendar();
 }
-void SimulationWindow::pause() { timer_->stop(); }
+void SimulationWindow::pause() { timer_->stop(); officeAnimator_->pause(); }
 void SimulationWindow::updateSpeed()
 {
     timer_->setInterval(std::max(1, qRound(setup_.animationTickMs / speed_->currentData().toDouble())));
+    officeAnimator_->retime(timer_->interval() * 4 / 5);
 }
 void SimulationWindow::reset()
 {
-    pause(); engine_.reset(); displayedLogCount_ = 0; journal_->setRowCount(0);
+    pause(); officeAnimator_->finish(); officeCatalogSignature_.clear(); engine_.reset(); displayedLogCount_ = 0; journal_->setRowCount(0);
     {
         const QSignalBlocker a(scope_), b(department_), c(employee_), d(status_), e(from_), f(to_), g(showPlanned_);
         scope_->setCurrentIndex(0); department_->setCurrentIndex(0); employee_->setCurrentIndex(0); status_->setCurrentIndex(0);
@@ -318,10 +322,13 @@ void SimulationWindow::reset()
 }
 void SimulationWindow::step()
 {
+    officeAnimator_->finish();
     const auto result = engine_.step();
     if (!result.ok()) { pause(); QMessageBox::warning(this, tr("Модельное время"), errorText(result)); }
     if (engine_.finished()) pause();
+    animateOfficeStep_ = true;
     refreshCalendar();
+    animateOfficeStep_ = false;
 }
 
 void SimulationWindow::refreshCalendar()
@@ -653,5 +660,6 @@ void SimulationWindow::refreshOffice()
         signature += QStringLiteral("e%1:%2;").arg(event.id).arg(event.version);
     if (signature == officeCatalogSignature_) return;
     officeCatalogSignature_ = signature;
-    populateOfficeScene(*officeScene_, calendar);
+    const int budget = timer_->isActive() ? std::min(timer_->interval(), std::max(0, timer_->remainingTime())) : timer_->interval();
+    officeAnimator_->update(calendar, animateOfficeStep_ ? budget * 4 / 5 : 0);
 }

@@ -15,6 +15,7 @@ class QTableWidget;
 class QTabWidget;
 class QCheckBox;
 class QGraphicsScene;
+class OfficeAnimator;
 
 class SimulationWindow : public QWidget
 {
@@ -60,6 +61,8 @@ private:
     QLabel *actorLabel_;
     QGraphicsScene *officeScene_;
     QString officeCatalogSignature_;
+    OfficeAnimator *officeAnimator_;
+    bool animateOfficeStep_ = false;
     int displayedLogCount_ = 0;
 };
 
