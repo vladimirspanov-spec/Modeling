@@ -4,5 +4,5 @@
 class ConflictResolver {
 public:
     static QVector<EventData> alternatives(const CalendarService &calendar, const CalendarSetup &setup,
-        const EventData &requested, const UserContext &actor, EventId id = 0);
+        const EventData &requested, const UserContext &actor, EventId id = 0, bool separatePlanningDays = false);
 };

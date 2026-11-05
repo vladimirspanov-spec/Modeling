@@ -1,3 +1,4 @@
+#include "src/reporting/simulationreport.h"
 #include "simulationwindow.h"
 #include "officescene.h"
 #include "widget.h"
@@ -46,20 +47,24 @@ void inDialog(const std::function<void(QDialog *)> &action) {
         action(dialog);
     });
 }
-void fillEvent(QDialog *dialog, const QString &title, QTime start, QTime end) {
-    dialog->findChild<QLineEdit *>("eventTitle")->setText(title);
-    auto *startEdit = dialog->findChild<QDateTimeEdit *>("eventStart");
-    auto *endEdit = dialog->findChild<QDateTimeEdit *>("eventEnd");
-    startEdit->setDate(QDate(2026, 10, 12)); startEdit->setTime(start);
-    endEdit->setDate(QDate(2026, 10, 12)); endEdit->setTime(end);
-    dialog->findChild<QPushButton *>("saveEvent")->click();
+void seedEvent(SimulationWindow &window, const QString &title, QTime start, QTime end, int room = 0) {
+    // Prepare a fixture through the model; the observation UI cannot create events.
+    auto engine = window.simulationEngine();
+    EventData data; data.title = title;
+    data.start = modelDateTime(engine.setup().startDate, start);
+    data.end = modelDateTime(engine.setup().startDate, end);
+    data.participantIds = {1}; data.organizerId = 1;
+    if (room) data.roomId = room;
+    QVERIFY(engine.createEvent(data, {1, UserRole::Secretary, {}}).ok());
+    window.restoreState(std::move(engine));
 }
+
 }
 
 class CalendarWindowTest : public QObject {
     Q_OBJECT
 private slots:
-    void dailyHourFilterAndLeaderAppointmentAreUsable() {
+    void dailyHourFilterWorksInObservationMode() {
         auto config=setup(); SimulationEngine engine(config);
         EventData event; event.title="Overnight"; event.start=modelDateTime(config.startDate,QTime(20,0));
         event.end=modelDateTime(config.startDate.addDays(1),QTime(10,0)); event.participantIds={1}; event.organizerId=1;
@@ -75,18 +80,9 @@ private slots:
         from->setTime(QTime(12,0));
         QVERIFY(window.findChild<QLabel *>("calendarSummary")->text().contains(QString::fromUtf8("Некорректный фильтр")));
         enabled->setChecked(false); QCOMPARE(window.findChildren<QPushButton *>("calendarEvent").size(),2);
-        auto *departments=window.findChild<QTableWidget *>("organizationsTable");
-        departments->selectRow(0);
-        inDialog([](QDialog *dialog) {
-            auto *employees=dialog->findChild<QComboBox *>("leaderEmployee"); QVERIFY(employees);
-            employees->setCurrentIndex(employees->findData(2)); dialog->accept();
-        });
-        window.findChild<QPushButton *>("assignLeader")->click();
-        QCOMPARE(window.calendarService().catalog().departments.value(1).leaderId,2);
-        QCOMPARE(departments->item(0,3)->text(),QString("1_02"));
-        QVERIFY(window.findChild<QTableWidget *>("participantsTable")->item(1,3)->text().contains(QString::fromUtf8("Руководитель")));
-        window.findChild<QPushButton *>("resetSimulation")->click();
-        QCOMPARE(departments->item(0,3)->text(),QString("1_01")); QVERIFY(!enabled->isChecked());
+        QVERIFY(!window.findChild<QPushButton *>("assignLeader"));
+        QVERIFY(!window.findChild<QPushButton *>("transferParticipant"));
+        QCOMPARE(window.calendarService().catalog().departments.value(1).leaderId,1);
     }
     void groupedMailCanBeOpenedAndKeepsRepeatsSeparate() {
         auto config = setup(); config.reminders[0] = {1,1};
@@ -100,7 +96,7 @@ private slots:
         QVERIFY(engine.createEvent(event, {1,UserRole::Secretary,{}}).ok());
         QVERIFY(engine.step().ok());
         int pauses = 0;
-        RunTools view(engine, [&] { ++pauses; }, [] {}, [](EventId) {});
+        RunTools view(engine, [&] { ++pauses; }, [] {}, [] { return UserContext{1, UserRole::Secretary, {}}; }, [](EventId) {}, [](const RequestRecord &) {});
         view.refresh(); view.show();
         view.findChild<QTabWidget *>()->setCurrentIndex(1);
         auto *mail = view.findChild<QTableWidget *>("emailsTable");
@@ -165,18 +161,20 @@ private slots:
         parameters.findChild<QComboBox *>("conflictPolicy")->setCurrentIndex(2);
         parameters.findChild<QSpinBox *>("rescheduleWindowWorkdays")->setValue(8);
         parameters.findChild<QSpinBox *>("repetitions")->setValue(4);
+        parameters.findChild<QComboBox *>("actorRole")->setCurrentIndex(1);
         for (auto *button : parameters.findChildren<QPushButton *>())
             if (button->text() == QString::fromUtf8("Открыть моделирование")) button->click();
         SimulationWindow *window = nullptr;
         for (auto *child : parameters.children()) if (auto *w = dynamic_cast<SimulationWindow *>(child)) window = w;
         QVERIFY(window);
         const auto &s = window->simulationEngine().setup();
+        QCOMPARE(s.role, UserRole::Manager);
         QVERIFY(s.periodicSeminars); QCOMPARE(s.seminarPeriodDays,3); QCOMPARE(s.seminarLeadDays,1);
         QCOMPARE(s.seminarTime,QTime(15,0)); QCOMPARE(s.seminarDurationMinutes,60);
         QCOMPARE(s.reminders[0].leadDays,7); QCOMPARE(s.reminders[2].periodHours,3);
         QCOMPARE(s.conflictPolicy,ConflictPolicy::AutoReschedule); QCOMPARE(s.rescheduleWindowWorkdays,8); QCOMPARE(s.repetitions,4);
     }
-    void finishStopsTimerAndTransferUpdatesUi() {
+    void finishStopsTimerInObservationMode() {
         auto config = setup(); config.stepMinutes = 60;
         SimulationWindow window(config);
         window.show();
@@ -184,11 +182,8 @@ private slots:
         people->selectRow(0);
         auto *filter = window.findChild<QComboBox *>("employeeFilter");
         filter->setCurrentIndex(1);
-        inDialog([](QDialog *dialog) { dialog->accept(); });
-        window.findChild<QPushButton *>("transferParticipant")->click();
-        QCOMPARE(window.calendarService().participantCode(1), QString("2_09"));
-        QCOMPARE(people->item(0, 0)->text(), QString("2_09"));
-        QCOMPARE(filter->currentText(), QString("2_09"));
+        QVERIFY(!window.findChild<QPushButton *>("transferParticipant"));
+        QCOMPARE(window.calendarService().participantCode(1), QString("1_01"));
         QCOMPARE(filter->currentData().toInt(), 1);
         auto *timer = window.findChild<QTimer *>("simulationTimer");
         auto *start = window.findChild<QPushButton *>("startSimulation");
@@ -246,58 +241,117 @@ private slots:
         QVERIFY(automatic.calendarService().modelTime() > pausedTime);
         automatic.findChild<QPushButton *>("resetSimulation")->click();
         QCOMPARE(automatic.calendarService().modelTime(), modelDateTime(config.startDate));
-        QVERIFY(automatic.simulationEngine().log().isEmpty());
-        QCOMPARE(automatic.findChild<QTableWidget *>("simulationLog")->rowCount(), 0);
+        QCOMPARE(automatic.simulationEngine().log().size(), SimulationEngine(config).log().size());
+        QCOMPARE(automatic.findChild<QTableWidget *>("simulationLog")->rowCount(), SimulationEngine(config).log().size());
         QCOMPARE(automatic.calendarService().participantCode(1), QString("1_01"));
         QVERIFY(step->isEnabled());
         QVERIFY(!timer->isActive());
     }
-    void dialogPausesAndParticipantIds() {
-        SimulationWindow window(setup());
-        window.show();
+    void employeeCannotEditExistingEventsAndFiltersDoNotChangeModel() {
+        auto config = setup(); config.role = UserRole::Employee;
+        SimulationWindow window(config); window.show();
+        seedEvent(window, "Read only", QTime(10,0), QTime(11,0));
+        QVERIFY(window.findChild<QPushButton *>("addEvent"));
+        const auto before = SimulationReport::create(window.simulationEngine());
         window.findChild<QPushButton *>("startSimulation")->click();
         inDialog([&](QDialog *dialog) {
             QVERIFY(!window.findChild<QTimer *>("simulationTimer")->isActive());
-            QCOMPARE(dialog->findChild<QLineEdit *>("eventParticipants")->text(), QString("1_01"));
-            QCOMPARE(dialog->findChild<QLineEdit *>("eventOrganizer")->text(), QString("1_01"));
-            dialog->findChild<QLineEdit *>("eventParticipants")->setText("1_01, 2_01");
-            fillEvent(dialog, "Cross department", QTime(10, 0), QTime(11, 0));
+            QVERIFY(!dialog->findChild<QPushButton *>("saveEvent"));
+            QVERIFY(!dialog->findChild<QPushButton *>("cancelEvent"));
+            for (const auto *name : {"eventTitle", "eventParticipants", "eventOrganizer"})
+                QVERIFY(!dialog->findChild<QLineEdit *>(name)->isEnabled());
+            QVERIFY(!dialog->findChild<QDateTimeEdit *>("eventStart")->isEnabled());
+            QVERIFY(!dialog->findChild<QComboBox *>("eventRoom")->isEnabled());
+            dialog->reject();
         });
-        window.findChild<QPushButton *>("addEvent")->click();
-        QTRY_COMPARE(window.calendarService().calendar().events.size(), 1);
-        QCOMPARE(window.calendarService().event(1)->data.participantIds, QVector<int>({1, 9}));
-        QVERIFY(!window.findChild<QTimer *>("simulationTimer")->isActive());
-    }
-    void createEditCancelAndFilter() {
-        SimulationWindow window(setup());
-        window.show();
-        window.findChild<QCheckBox *>("showPlanned")->setChecked(true);
-        inDialog([](QDialog *dialog) { fillEvent(dialog, "Test event", QTime(9, 10), QTime(9, 40)); });
-        window.findChild<QPushButton *>("addEvent")->click();
-        QTRY_COMPARE(window.findChildren<QPushButton *>("calendarEvent").size(), 1);
-        QCOMPARE(window.calendarService().event(1)->data.title, QString("Test event"));
-        inDialog([](QDialog *dialog) { fillEvent(dialog, "Renamed", QTime(10, 0), QTime(11, 0)); });
         window.findChild<QPushButton *>("calendarEvent")->click();
-        QTRY_VERIFY(window.findChild<QPushButton *>("calendarEvent")->text().contains("Renamed"));
         auto *employee = window.findChild<QComboBox *>("employeeFilter");
         employee->setCurrentIndex(2);
         QCOMPARE(window.findChildren<QPushButton *>("calendarEvent").size(), 0);
         employee->setCurrentIndex(0);
-        auto *department = window.findChild<QComboBox *>("departmentFilter");
-        department->setCurrentIndex(2);
-        QCOMPARE(window.findChildren<QPushButton *>("calendarEvent").size(), 0);
-        department->setCurrentIndex(0);
-        inDialog([](QDialog *dialog) { dialog->findChild<QPushButton *>("cancelEvent")->click(); });
-        window.findChild<QPushButton *>("calendarEvent")->click();
-        QTRY_COMPARE(window.findChildren<QPushButton *>("calendarEvent").size(), 0);
-        window.findChild<QComboBox *>("calendarScope")->setCurrentIndex(1);
-        QCOMPARE(window.findChildren<QPushButton *>("calendarEvent").size(), 1);
-        QCOMPARE(window.calendarService().event(1)->status, EventStatus::Cancelled);
-        inDialog([](QDialog *dialog) {
-            QVERIFY(!dialog->findChild<QPushButton *>("saveEvent"));
-            QVERIFY(!dialog->findChild<QLineEdit *>("eventTitle")->isEnabled());
-            dialog->reject();
+        QCOMPARE(SimulationReport::create(window.simulationEngine()), before);
+    }
+    void suggestionsRequireExplicitChoiceOnPause() {
+        auto config = setup(); config.conflictPolicy = ConflictPolicy::Suggest;
+        SimulationEngine engine(config);
+        EventData data; data.title = "Conflict";
+        data.start = modelDateTime(config.startDate, QTime(10,0)); data.end = data.start.addSecs(3600);
+        data.participantIds = {1}; data.organizerId = 1; data.roomId = 1;
+        QVERIFY(engine.createEvent(data,{1,UserRole::Secretary,{}}).ok());
+        QVERIFY(!engine.createEvent(data,{1,UserRole::Secretary,{}}).ok());
+        SimulationWindow window(config); window.restoreState(std::move(engine));
+        window.findChild<QPushButton *>("stepCalendar")->click();
+        QVERIFY(window.simulationEngine().requests()[1].pending);
+        QCOMPARE(window.calendarService().calendar().events.size(), 1);
+        window.findChild<QTableWidget *>("requestsTable")->selectRow(1);
+        auto *accept = window.findChild<QPushButton *>("acceptSuggestion");
+        QVERIFY(accept->isEnabled());
+        window.findChild<QPushButton *>("startSimulation")->click();
+        inDialog([&](QDialog *dialog) {
+            QVERIFY(!window.findChild<QTimer *>("simulationTimer")->isActive()); dialog->accept();
         });
+        accept->click();
+        QVERIFY(!window.simulationEngine().requests()[1].pending);
+        QCOMPARE(window.calendarService().calendar().events.size(), 2);
+        QVERIFY(!window.findChild<QTimer *>("simulationTimer")->isActive());
+    }
+    void createAndEditOnPauseWithoutPersonnelControls() {
+        SimulationWindow window(setup()); window.show();
+        QVERIFY(!window.findChild<QPushButton *>("transferParticipant"));
+        QVERIFY(!window.findChild<QPushButton *>("assignLeader"));
+        window.findChild<QPushButton *>("startSimulation")->click();
+        inDialog([&](QDialog *dialog) {
+            QVERIFY(!window.findChild<QTimer *>("simulationTimer")->isActive());
+            QVERIFY(!dialog->findChild<QPushButton *>("cancelEvent"));
+            dialog->findChild<QLineEdit *>("eventTitle")->setText("Created by user");
+            dialog->findChild<QDateTimeEdit *>("eventStart")->setDateTime(modelDateTime(setup().startDate, QTime(10,0)));
+            dialog->findChild<QDateTimeEdit *>("eventEnd")->setDateTime(modelDateTime(setup().startDate, QTime(11,0)));
+            dialog->findChild<QPushButton *>("saveEvent")->click();
+        });
+        window.findChild<QPushButton *>("addEvent")->click();
+        QCOMPARE(window.calendarService().calendar().events.size(), 1);
+        QCOMPARE(window.calendarService().event(1)->data.title, QString("Created by user"));
+        QTRY_VERIFY(window.findChild<QPushButton *>("calendarEvent"));
+        inDialog([](QDialog *dialog) {
+            dialog->findChild<QLineEdit *>("eventTitle")->setText("Edited by user");
+            dialog->findChild<QPushButton *>("saveEvent")->click();
+        });
+        window.findChild<QPushButton *>("calendarEvent")->click();
+        QCOMPARE(window.calendarService().event(1)->data.title, QString("Edited by user"));
+        QVERIFY(!window.findChild<QTimer *>("simulationTimer")->isActive());
+    }
+    void pendingRequestCanReturnToEditing() {
+        auto config = setup(); config.conflictPolicy = ConflictPolicy::Suggest;
+        SimulationEngine engine(config);
+        EventData data; data.title = "Draft";
+        data.start = modelDateTime(config.startDate, QTime(10,0)); data.end = data.start.addSecs(3600);
+        data.participantIds = {1}; data.organizerId = 1;
+        QVERIFY(engine.createEvent(data, {1,UserRole::Secretary,{}}).ok());
+        QVERIFY(!engine.createEvent(data, {1,UserRole::Secretary,{}}).ok());
+        SimulationWindow window(config); window.restoreState(std::move(engine));
+        window.findChild<QTableWidget *>("requestsTable")->selectRow(1);
+        inDialog([](QDialog *dialog) {
+            QCOMPARE(dialog->findChild<QLineEdit *>("eventTitle")->text(), QString("Draft"));
+            dialog->findChild<QDateTimeEdit *>("eventStart")->setTime(QTime(12,0));
+            dialog->findChild<QDateTimeEdit *>("eventEnd")->setTime(QTime(13,0));
+            dialog->findChild<QPushButton *>("saveEvent")->click();
+        });
+        window.findChild<QPushButton *>("editRequest")->click();
+        QVERIFY(!window.simulationEngine().requests()[1].pending);
+        QCOMPARE(window.calendarService().calendar().events.size(), 2);
+        QCOMPARE(window.calendarService().event(2)->data.start.time(), QTime(12,0));
+    }
+    void managerCannotEditAnotherDepartment() {
+        auto config = setup(); config.role = UserRole::Manager;
+        SimulationWindow window(config); seedEvent(window, "Own department", QTime(10,0), QTime(11,0), 1);
+        inDialog([](QDialog *dialog) { QVERIFY(dialog->findChild<QPushButton *>("saveEvent")); dialog->reject(); });
+        window.findChild<QPushButton *>("calendarEvent")->click();
+        auto engine = window.simulationEngine();
+        auto data = engine.calendar().event(1)->data;
+        data.participantIds = {9}; data.organizerId = 9; data.roomId = 2;
+        QVERIFY(engine.updateEvent(1, data, {1, UserRole::Secretary, {}}).ok());
+        window.restoreState(std::move(engine));
+        inDialog([](QDialog *dialog) { QVERIFY(!dialog->findChild<QPushButton *>("saveEvent")); dialog->reject(); });
         window.findChild<QPushButton *>("calendarEvent")->click();
     }
     void officeMovesParticipantsBetweenHomeAndMeeting() {
@@ -315,13 +369,7 @@ private slots:
         for (auto *circle : circles())
             QCOMPARE(circle->data(1).toInt(), window.calendarService().catalog().employees.value(circle->data(0).toInt()).departmentId);
         const int hallId = window.calendarService().catalog().rooms.lastKey();
-        inDialog([hallId](QDialog *dialog) {
-            auto *room = dialog->findChild<QComboBox *>("eventRoom");
-            QVERIFY(room);
-            room->setCurrentIndex(room->findData(hallId));
-            fillEvent(dialog, "Conference", QTime(9, 10), QTime(9, 40));
-        });
-        window.findChild<QPushButton *>("addEvent")->click();
+        seedEvent(window, "Conference", QTime(9,10), QTime(9,40), hallId);
         QTRY_COMPARE(window.calendarService().calendar().events.size(), 1);
         for (auto *circle : circles()) QVERIFY(circle->data(1).toInt() != hallId);
         for (int i = 0; i < 19; ++i) window.findChild<QPushButton *>("stepCalendar")->click();
@@ -405,8 +453,7 @@ private slots:
         auto config = setup(); config.animationTickMs = 1000;
         SimulationWindow window(config);
         window.show();
-        inDialog([](QDialog *dialog) { fillEvent(dialog, "Moving", QTime(9, 10), QTime(10, 40)); });
-        window.findChild<QPushButton *>("addEvent")->click();
+        seedEvent(window, "Moving", QTime(9, 10), QTime(10, 40));
         QTRY_COMPARE(window.calendarService().calendar().events.size(), 1);
         for (int i = 0; i < 19; ++i) window.findChild<QPushButton *>("stepCalendar")->click();
         auto *scene = window.findChild<QGraphicsScene *>("officeScene");
@@ -526,8 +573,7 @@ private slots:
     void stepStartsCompletesAndArchives() {
         SimulationWindow window(setup());
         window.show();
-        inDialog([](QDialog *dialog) { fillEvent(dialog, "Short", QTime(9, 10), QTime(9, 40)); });
-        window.findChild<QPushButton *>("addEvent")->click();
+        seedEvent(window, "Short", QTime(9, 10), QTime(9, 40));
         QTRY_COMPARE(window.calendarService().calendar().events.size(), 1);
         QTRY_COMPARE(window.findChildren<QPushButton *>("calendarEvent").size(), 1);
         for (int i = 0; i < 18; ++i) window.findChild<QPushButton *>("stepCalendar")->click();
@@ -576,10 +622,7 @@ private slots:
         const QString title = QString::fromUtf8("Очень длинное название события для проверки переноса и размещения карточки ")
             + QString(120, QLatin1Char('W'));
         for (int hour = 6; hour < 11; ++hour) {
-            inDialog([title, hour](QDialog *dialog) {
-                fillEvent(dialog, title, QTime(hour, 0), QTime(hour + 1, 0));
-            });
-            window.findChild<QPushButton *>("addEvent")->click();
+            seedEvent(window, title, QTime(hour, 0), QTime(hour + 1, 0));
             QTRY_COMPARE(window.findChildren<QPushButton *>("calendarEvent").size(), hour - 5);
         }
         for (int width : {1120, 1500}) {
@@ -623,8 +666,8 @@ private slots:
             if (auto *candidate = dynamic_cast<SimulationWindow *>(child)) window = candidate;
         QVERIFY(window);
         QVERIFY(window->isVisible());
-        QCOMPARE(window->calendarService().calendar().events.size(), 0);
-        QCOMPARE(window->findChildren<QPushButton *>("calendarEvent").size(), 0);
+        QCOMPARE(window->calendarService().calendar().events.size(), 26);
+        QVERIFY(!window->findChildren<QPushButton *>("calendarEvent").isEmpty());
         window->findChild<QPushButton *>("stepCalendar")->click();
         QCOMPARE(window->calendarService().modelTime().time(), QTime(1, 0));
         for (int step = 0; step < 17; ++step) window->findChild<QPushButton *>("stepCalendar")->click();

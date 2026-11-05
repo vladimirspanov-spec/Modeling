@@ -29,19 +29,17 @@ public:
 
 private:
     void refreshCalendar();
-    void editEvent(std::optional<EventId> id = std::nullopt);
+    void showEvent(std::optional<EventId> id = std::nullopt, std::optional<EventData> draft = std::nullopt);
+    UserContext userContext() const;
     void step();
     void start();
     void pause();
     void reset();
     void updateSpeed();
     void refreshJournalAndState();
-    void transferParticipant();
-    void assignDepartmentLeader();
     void refreshOffice();
     CalendarSetup setup_;
     SimulationEngine engine_;
-    UserContext actor_;
     // QObject children are owned exclusively by the QWidget parent hierarchy.
     QLabel *summary_;
     QScrollArea *scroll_;

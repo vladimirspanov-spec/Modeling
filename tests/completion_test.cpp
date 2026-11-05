@@ -44,6 +44,25 @@ private slots:
         auto json=JsonCodec::setup(s); json["seminarPeriodDays"]=1.5;
         QVERIFY_EXCEPTION_THROWN(JsonCodec::setup(json),std::runtime_error);
     }
+    void initialCalendarAndPreviousGeneratorRoundTrip() {
+        auto s = config(); s.initialMeetings = true;
+        for (bool previous : {false, true}) {
+            SimulationEngine engine(s, false, previous);
+            QCOMPARE(engine.calendar().calendar().events.isEmpty(), previous);
+            auto restored = SimulationStore::restore(SimulationStore::snapshot(engine));
+            QCOMPARE(SimulationReport::create(*restored), SimulationReport::create(engine));
+            until(engine, modelDateTime(s.startDate.addDays(1)));
+            until(*restored, modelDateTime(s.startDate.addDays(1)));
+            QCOMPARE(SimulationReport::create(*restored), SimulationReport::create(engine));
+            auto resumed = SimulationStore::restore(SimulationStore::snapshot(engine));
+            QCOMPARE(SimulationReport::create(*resumed), SimulationReport::create(engine));
+        }
+        // Previously planned meetings may start less than five hours after t0.
+        s.workStart = QTime(1, 0); s.workEnd = QTime(3, 0);
+        SimulationEngine early(s);
+        QVERIFY(!early.calendar().calendar().events.isEmpty());
+        QCOMPARE(early.calendar().calendar().events.first().data.start.time(), QTime(1, 0));
+    }
     void remindersRepeatWithoutDuplicates() {
         auto s = config(); SimulationEngine e(s); auto data = meeting(s); QVERIFY(e.createEvent(data, actor()).ok());
         until(e, modelDateTime(s.startDate, QTime(2,0)));

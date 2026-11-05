@@ -122,7 +122,7 @@ QString errorText(const CalendarResult &result) {
 }
 
 SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
-    : QWidget(parent, Qt::Window), setup_(setup), engine_(setup), actor_{1, setup.role, {1}}
+    : QWidget(parent, Qt::Window), setup_(setup), engine_(setup)
 {
     setAttribute(Qt::WA_DeleteOnClose);
     setWindowTitle(tr("Моделирование — календарь фирмы"));
@@ -146,12 +146,12 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
     speed_->setObjectName("simulationSpeed");
     for (double speed : {0.5, 1.0, 2.0, 5.0}) speed_->addItem(QString::number(speed) + QStringLiteral("×"), speed);
     speed_->setCurrentIndex(1);
-    addButton_ = new QPushButton(tr("+ Событие"), this);
-    addButton_->setObjectName("addEvent");
     for (auto *button : {startButton_, pauseButton_, stepButton_, resetButton}) actions->addWidget(button);
     actions->addWidget(new QLabel(tr("Скорость"), this));
     actions->addWidget(speed_);
     actions->addStretch();
+    addButton_ = new QPushButton(tr("+ Событие"), this);
+    addButton_->setObjectName("addEvent");
     actions->addWidget(addButton_);
     layout->addLayout(actions);
     summary_ = new QLabel(this);
@@ -182,7 +182,7 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
     tabs_->addTab(journal_, tr("Журнал"));
     connect(journal_, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
         const auto id = journal_->item(row, 0)->data(Qt::UserRole).toULongLong();
-        if (id) editEvent(id);
+        if (id) showEvent(id);
     });
 
     auto *calendarPage = new QWidget(this);
@@ -273,23 +273,11 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
     auto *peopleLayout = new QVBoxLayout(peoplePage);
     participants_ = table({tr("ID"), tr("Участник"), tr("Отдел"), tr("Состояние")}, "participantsTable");
     peopleLayout->addWidget(participants_);
-    auto *transfer = new QPushButton(tr("Перевести выбранного участника…"), peoplePage);
-    transfer->setObjectName("transferParticipant");
-    transfer->setEnabled(setup.role == UserRole::Secretary);
-    peopleLayout->addWidget(transfer);
     tabs_->addTab(peoplePage, tr("Участники"));
-    connect(transfer, &QPushButton::clicked, this, [this] { transferParticipant(); });
     auto *departmentPage = new QWidget(this);
     auto *departmentLayout = new QVBoxLayout(departmentPage);
     organizations_ = table({tr("Отдел"), tr("Участников"), tr("Состояние"), tr("Руководитель")}, "organizationsTable");
     departmentLayout->addWidget(organizations_);
-    auto *assignLeader = new QPushButton(tr("Назначить руководителя…"), departmentPage);
-    assignLeader->setObjectName("assignLeader");
-    assignLeader->setEnabled(setup.role == UserRole::Secretary);
-    departmentLayout->addWidget(assignLeader);
-    auto *leaderNote = new QLabel(tr("Назначение применяется к новым совещаниям. При переводе руководителя в другой отдел должность освобождается."), departmentPage);
-    leaderNote->setWordWrap(true); departmentLayout->addWidget(leaderNote);
-    connect(assignLeader, &QPushButton::clicked, this, [this] { assignDepartmentLeader(); });
     tabs_->addTab(departmentPage, tr("Отделы"));
     auto *catalog = table({tr("Событие"), tr("Относительный вес"), tr("Базовая длительность")}, "eventCatalog");
     for (const auto &definition : SimulationEngine::eventCatalog()) {
@@ -301,8 +289,9 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
     catalog->setToolTip(tr("Вероятности пропорциональны весам доступных событий. Восстановление возможно только после происшествия."));
     tabs_->addTab(catalog, tr("Типы событий"));
 
-    runTools_ = new RunTools(engine_, [this] { pause(); }, [this] { refreshCalendar(); },
-        [this](EventId id) { editEvent(id); }, this);
+    runTools_ = new RunTools(engine_, [this] { pause(); }, [this] { refreshCalendar(); }, [this] { return userContext(); },
+        [this](EventId id) { showEvent(id); },
+        [this](const RequestRecord &request) { showEvent(request.editedEvent ? std::optional<EventId>(request.editedEvent) : std::nullopt, request.requested); }, this);
     tabs_->addTab(runTools_, tr("Заявки, почта и отчёт"));
 
     connect(startButton_, &QPushButton::clicked, this, [this] { start(); });
@@ -310,7 +299,7 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
     connect(resetButton, &QPushButton::clicked, this, [this] { reset(); });
     connect(speed_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] { updateSpeed(); });
     connect(timer_, &QTimer::timeout, this, [this] { step(); });
-    connect(addButton_, &QPushButton::clicked, this, [this] { editEvent(); });
+    connect(addButton_, &QPushButton::clicked, this, [this] { showEvent(); });
     connect(stepButton_, &QPushButton::clicked, this, [this] { step(); });
     for (auto *combo : {scope_, department_, status_, employee_})
         connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] { refreshCalendar(); });
@@ -354,7 +343,10 @@ void SimulationWindow::reset()
 void SimulationWindow::step()
 {
     officeAnimator_->finish();
+    const auto requestCount = engine_.requests().size();
     const auto result = engine_.step();
+    for (int i = requestCount; i < engine_.requests().size(); ++i)
+        if (engine_.requests()[i].pending) { pause(); break; }
     if (!result.ok()) { pause(); QMessageBox::warning(this, tr("Модельное время"), errorText(result)); }
     if (engine_.finished()) pause();
     animateOfficeStep_ = true;
@@ -386,14 +378,12 @@ void SimulationWindow::refreshCalendar()
         .arg(engine_.calendar().calendar().events.size()).arg(engine_.calendar().calendar(archiveFilter).events.size())
         .arg(result.events.size()).arg(result.result.ok() ? QString() : "\n" + result.result.message));
     const bool finished = engine_.calendar().modelTime() == engine_.calendar().horizonEnd();
+    addButton_->setEnabled(!finished);
     stepButton_->setEnabled(!finished && !timer_->isActive());
     startButton_->setEnabled(!finished && !timer_->isActive());
     pauseButton_->setEnabled(timer_->isActive());
     startButton_->setText(engine_.calendar().modelTime() == modelDateTime(setup_.startDate) ? tr("▶ Запустить") : tr("▶ Продолжить"));
     summary_->setText((timer_->isActive() ? tr("Идет · ") : finished ? tr("Завершено · ") : tr("Пауза · ")) + summary_->text());
-    addButton_->setEnabled(!finished);
-    findChild<QPushButton *>("assignLeader")->setEnabled(!finished && actor_.role == UserRole::Secretary &&
-        engine_.modelVersion() == SimulationEngine::generatorVersion());
     if (finished) summary_->setText(summary_->text() + tr("\nПериод завершен. Незавершенные и будущие события остаются в активном календаре."));
 
     auto *calendar = new QWidget;
@@ -465,7 +455,7 @@ void SimulationWindow::refreshCalendar()
                 .arg(participantText(event.data.participantIds, event.participantCodes))
                 .arg(event.data.roomId ? engine_.calendar().catalog().rooms.value(*event.data.roomId).name : tr("Без помещения"))
                 .arg(event.data.title));
-            connect(button, &QPushButton::clicked, this, [this, id = event.id] { editEvent(id); });
+            connect(button, &QPushButton::clicked, this, [this, id = event.id] { showEvent(id); });
             eventsLayout->addWidget(button);
         }
         eventsLayout->addStretch();
@@ -474,11 +464,16 @@ void SimulationWindow::refreshCalendar()
     scroll_->setWidget(calendar); // Scroll area deletes the previous presentation, never the events.
 }
 
-void SimulationWindow::editEvent(std::optional<EventId> id)
+UserContext SimulationWindow::userContext() const
 {
-    pause();
+    return {1, setup_.role, {engine_.calendar().catalog().employees.value(1).departmentId}};
+}
+
+void SimulationWindow::showEvent(std::optional<EventId> id, std::optional<EventData> draft)
+{
     const auto existing = id ? engine_.calendar().event(*id) : std::nullopt;
     if (id && !existing) return;
+    pause();
     QDialog dialog(this);
     dialog.setObjectName("eventDialog");
     dialog.setWindowTitle(existing ? tr("Событие №%1 — %2").arg(*id).arg(statusName(existing->status)) : tr("Новое событие"));
@@ -512,12 +507,12 @@ void SimulationWindow::editEvent(std::optional<EventId> id)
     initial.title = tr("Новое событие");
     initial.start = engine_.calendar().modelTime().addSecs(5 * 3600);
     initial.end = initial.start.addSecs(3600);
-    initial.participantIds = {actor_.employeeId};
-    initial.organizerId = actor_.employeeId;
+    initial.organizerId = 1; initial.participantIds = {1};
     if (existing) initial = existing->data;
+    if (draft) initial = *draft;
     title->setText(initial.title);
     type->setCurrentIndex(int(initial.type));
-    // Editors hold civil fields; conversion to the model's fixed UTC+03:00 is explicit on save.
+    // Display civil fields in the model's fixed UTC+03:00.
     start->setDate(initial.start.toOffsetFromUtc(10800).date());
     start->setTime(initial.start.toOffsetFromUtc(10800).time());
     end->setDate(initial.end.toOffsetFromUtc(10800).date());
@@ -525,9 +520,9 @@ void SimulationWindow::editEvent(std::optional<EventId> id)
     room->setCurrentIndex(room->findData(initial.roomId.value_or(0)));
     QMap<int, QString> codes;
     for (int person : initial.participantIds) codes.insert(person, engine_.calendar().participantCode(person));
-    participants->setText(participantText(initial.participantIds, existing ? existing->participantCodes : codes));
+    participants->setText(participantText(initial.participantIds, codes));
     importance->setCurrentIndex(int(initial.importance));
-    organizer->setText(existing ? existing->organizerCode : engine_.calendar().participantCode(initial.organizerId));
+    organizer->setText(engine_.calendar().participantCode(initial.organizerId));
     form->addRow(tr("Название"), title);
     form->addRow(tr("Тип"), type);
     form->addRow(tr("Начало (UTC+03:00)"), start);
@@ -539,11 +534,12 @@ void SimulationWindow::editEvent(std::optional<EventId> id)
     auto *help = new QLabel(tr("ID: отдел_номер, например 1_01. Актуальные ID указаны на вкладке «Участники». При переводе ID меняется автоматически."), &dialog);
     help->setWordWrap(true);
     form->addRow(help);
-    const bool editable = (!existing || existing->status == EventStatus::Planned) && engine_.calendar().modelTime() < engine_.calendar().horizonEnd();
+    const auto permission = existing ? engine_.calendar().checkEvent(initial, userContext(), *id) : CalendarResult{};
+    const bool editable = !engine_.finished() && (!existing || (existing->status == EventStatus::Planned &&
+        permission.error != CalendarError::PermissionDenied));
     for (QWidget *field : QVector<QWidget *>{title, type, start, end, room, participants, importance, organizer}) field->setEnabled(editable);
-    auto *error = new QLabel(&dialog);
-    error->setObjectName("eventError");
-    error->setWordWrap(true);
+    auto *error = new QLabel(&dialog); error->setObjectName("eventError"); error->setWordWrap(true);
+    if (existing && permission.error == CalendarError::PermissionDenied) error->setText(permission.message);
     form->addRow(error);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
@@ -551,42 +547,31 @@ void SimulationWindow::editEvent(std::optional<EventId> id)
         auto *save = buttons->addButton(tr("Сохранить"), QDialogButtonBox::ActionRole);
         save->setObjectName("saveEvent");
         connect(save, &QPushButton::clicked, &dialog, [&] {
-            EventData data = initial;
-            data.title = title->text();
-            data.type = static_cast<EventType>(type->currentIndex());
+            auto data = initial;
+            data.title = title->text(); data.type = EventType(type->currentIndex());
             data.start = modelDateTime(start->date(), start->time());
             data.end = modelDateTime(end->date(), end->time());
             data.roomId = room->currentData().toInt() ? std::optional<int>(room->currentData().toInt()) : std::nullopt;
             data.participantIds.clear();
             for (const auto &token : participants->text().split(',')) {
-                const auto participant = engine_.calendar().participantKey(token.trimmed());
-                if (!participant) { error->setText(tr("Участник %1 не найден. Используйте ID вида 1_01.").arg(token.trimmed())); return; }
-                data.participantIds.append(*participant);
+                const auto key = engine_.calendar().participantKey(token.trimmed());
+                if (!key) { error->setText(tr("Участник %1 не найден.").arg(token.trimmed())); return; }
+                data.participantIds.append(*key);
             }
-            data.importance = static_cast<Importance>(importance->currentIndex());
-            const auto organizerId = engine_.calendar().participantKey(organizer->text());
-            if (!organizerId) { error->setText(tr("Организатор не найден.")); return; }
-            data.organizerId = *organizerId;
-            const auto result = id ? engine_.updateEvent(*id, data, actor_) : engine_.createEvent(data, actor_);
-            if (!result.ok()) {
-                error->setText(errorText(result));
-                if (result.requestId && engine_.requests().value(int(result.requestId - 1)).pending) {
-                    QMessageBox::information(&dialog, tr("Заявка сохранена"), result.message);
-                    dialog.accept();
-                }
-                return;
-            }
-            dialog.accept();
-        });
-        if (existing) {
-            auto *cancel = buttons->addButton(tr("Отменить событие"), QDialogButtonBox::ActionRole);
-            cancel->setObjectName("cancelEvent");
-            connect(cancel, &QPushButton::clicked, &dialog, [&] {
-                const auto result = engine_.cancelEvent(*id, actor_);
-                if (!result.ok()) { error->setText(errorText(result)); return; }
+            const auto key = engine_.calendar().participantKey(organizer->text().trimmed());
+            if (!key) { error->setText(tr("Организатор не найден.")); return; }
+            data.organizerId = *key; data.importance = Importance(importance->currentIndex());
+            const auto result = id ? engine_.updateEvent(*id, data, userContext()) : engine_.createEvent(data, userContext());
+            if (result.ok()) { dialog.accept(); return; }
+            QStringList conflicts;
+            for (auto conflict : result.conflicts) conflicts.append(QString::number(conflict));
+            error->setText(result.message + (conflicts.isEmpty() ? QString() : tr(" Конфликтующие события: %1.").arg(conflicts.join(", "))));
+            if (result.requestId && engine_.requests().value(int(result.requestId - 1)).pending) {
+                QMessageBox::information(&dialog, tr("Требуется решение"),
+                    tr("Варианты переноса доступны на вкладке «Заявки». Выберите вариант или вернитесь к редактированию мероприятия."));
                 dialog.accept();
-            });
-        }
+            }
+        });
     }
     if (existing) {
         form->addRow(new QLabel(tr("Версия: %1 · Записей в истории: %2")
@@ -662,60 +647,10 @@ void SimulationWindow::refreshJournalAndState()
         put(organizations_, row, 3, department.leaderId ? engine_.calendar().participantCode(department.leaderId) : tr("Не назначен"));
         ++row;
     }
-    const auto actor = catalog.employees.value(actor_.employeeId);
-    actor_.permittedDepartmentIds = {actor.departmentId};
-    actorLabel_->setText(tr("Пользователь %1 · %2 · Seed %3 · %4")
-        .arg(actor.publicId)
-        .arg(actor_.role == UserRole::Secretary ? tr("Секретарь") : actor_.role == UserRole::Manager ? tr("Руководитель") : tr("Сотрудник"))
-        .arg(setup_.seed).arg(engine_.log().isEmpty() ? tr("Нажмите «Запустить» или выполните шаг.") : tr("Записи появляются по мере моделирования.")));
-}
-
-void SimulationWindow::assignDepartmentLeader()
-{
-    if (organizations_->currentRow() < 0) {
-        QMessageBox::information(this, tr("Руководитель отдела"), tr("Выберите отдел в списке.")); return;
-    }
-    pause();
-    const int department = organizations_->item(organizations_->currentRow(), 0)->data(Qt::UserRole).toInt();
-    QDialog dialog(this); dialog.setWindowTitle(tr("Назначение руководителя отдела %1").arg(department));
-    auto *layout = new QVBoxLayout(&dialog);
-    auto *employees = new QComboBox(&dialog); employees->setObjectName("leaderEmployee");
-    for (const auto &person : engine_.calendar().catalog().employees)
-        if (person.departmentId == department) employees->addItem(person.publicId + " · " + person.name, person.id);
-    employees->setCurrentIndex(std::max(0, employees->findData(engine_.calendar().catalog().departments.value(department).leaderId)));
-    layout->addWidget(employees);
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    buttons->button(QDialogButtonBox::Ok)->setEnabled(employees->count() > 0);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
-    if (dialog.exec() == QDialog::Accepted && employees->currentIndex() >= 0) {
-        const auto result = engine_.assignLeader(department, employees->currentData().toInt(), actor_);
-        if (!result.ok()) QMessageBox::warning(this, tr("Назначение руководителя"), result.message);
-        refreshCalendar();
-    }
-}
-
-void SimulationWindow::transferParticipant()
-{
-    pause();
-    const int row = participants_->currentRow();
-    if (row < 0) { QMessageBox::information(this, tr("Перевод"), tr("Выберите участника в таблице.")); refreshCalendar(); return; }
-    const int id = participants_->item(row, 0)->data(Qt::UserRole).toInt();
-    QStringList names;
-    QVector<int> ids;
-    const auto person = engine_.calendar().catalog().employees.value(id);
-    for (const auto &department : engine_.calendar().catalog().departments) {
-        if (department.id == person.departmentId) continue;
-        names.append(department.name); ids.append(department.id);
-    }
-    bool accepted = false;
-    const QString chosen = QInputDialog::getItem(this, tr("Перевод %1").arg(person.publicId), tr("Принимающий отдел"), names, 0, false, &accepted);
-    if (accepted) {
-        const auto result = engine_.transferEmployee(id, ids[names.indexOf(chosen)], actor_);
-        if (!result.ok()) QMessageBox::warning(this, tr("Перевод"), errorText(result));
-    }
-    refreshCalendar();
+    actorLabel_->setText(tr("Пользователь %1 · %2 · Seed %3 · Изменения календаря выполняются на паузе.")
+        .arg(engine_.calendar().participantCode(1))
+        .arg(setup_.role == UserRole::Secretary ? tr("Секретарь") : setup_.role == UserRole::Manager ? tr("Руководитель") : tr("Сотрудник"))
+        .arg(setup_.seed));
 }
 
 void SimulationWindow::refreshOffice()
@@ -739,7 +674,6 @@ void SimulationWindow::restoreState(SimulationEngine engine)
 {
     pause(); officeAnimator_->finish();
     setup_ = engine.setup(); engine_ = std::move(engine);
-    actor_ = {1, setup_.role, {engine_.calendar().catalog().employees.value(1).departmentId}};
     displayedLogCount_ = 0; journal_->setRowCount(0); officeCatalogSignature_.clear();
     refreshCalendar();
 }

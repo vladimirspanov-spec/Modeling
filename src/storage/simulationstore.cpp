@@ -42,9 +42,10 @@ std::unique_ptr<SimulationEngine> SimulationStore::restore(const QJsonObject &do
     const int schemaVersion = document["schemaVersion"].toInt();
     check(document["format"] == "SecretarySimulation" && schemaVersion >= 1 && schemaVersion <= 3, "Unknown state format/version");
     const bool legacy = document["generator"] == "live-minute-v4";
-    check(legacy || (schemaVersion == 3 && document["generator"] == SimulationEngine::generatorVersion()), "Incompatible generator version");
+    const bool previous = document["generator"] == "live-minute-v5";
+    check(legacy || (schemaVersion == 3 && (previous || document["generator"] == SimulationEngine::generatorVersion())), "Incompatible generator version");
     check(document["commands"].isArray(), "Missing command journal");
-    auto engine = std::make_unique<SimulationEngine>(JsonCodec::setup(document["configuration"].toObject()), legacy);
+    auto engine = std::make_unique<SimulationEngine>(JsonCodec::setup(document["configuration"].toObject()), legacy, previous);
     const auto commands = document["commands"].toArray();
     check(commands.size() <= 1000000, "Command journal too large");
     for (const auto &command : commands) { check(command.isObject(), "Invalid command"); engine->replayCommand(command.toObject()); }

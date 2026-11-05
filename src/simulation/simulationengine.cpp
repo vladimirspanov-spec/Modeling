@@ -37,9 +37,9 @@ const QVector<ScenarioDefinition> &SimulationEngine::eventCatalog()
     return definitions;
 }
 
-SimulationEngine::SimulationEngine(CalendarSetup setup, bool legacySchedule)
+SimulationEngine::SimulationEngine(CalendarSetup setup, bool legacySchedule, bool previousSchedule)
     : setup_(std::move(setup)), calendar_(makeCompanyCatalog(setup_), modelDateTime(setup_.startDate),
-          modelDateTime(setup_.startDate.addDays(setup_.dayCount))), random_(setup_.seed), legacySchedule_(legacySchedule)
+          modelDateTime(setup_.startDate.addDays(setup_.dayCount))), random_(setup_.seed), previousSchedule_(previousSchedule || legacySchedule), legacySchedule_(legacySchedule)
 {
     const int count = setup_.departmentCount * setup_.employeesPerDepartment;
     if (!std::isfinite(setup_.requestRatePerWorkday) || setup_.requestRatePerWorkday < 0 || setup_.requestRatePerWorkday > 100000 ||
@@ -88,9 +88,10 @@ void SimulationEngine::reset()
     for (const auto &department : calendar_.catalog().departments) organizations_.insert(department.id, {});
     nextMeetingCreation_ = {};
     nextMeetingDepartment_ = 1;
-    if (setup_.initialMeetings) scheduleMeetingCreation(setup_.startDate);
+    if (setup_.initialMeetings && previousSchedule_) scheduleMeetingCreation(setup_.startDate);
     initialized_ = false;
     nextSeminarDate_ = setup_.startDate.addDays(setup_.seminarLeadDays);
+    if (setup_.initialMeetings && !previousSchedule_) initializeCalendar();
 }
 
 int SimulationEngine::randomInt(int first, int last) { return std::uniform_int_distribution<int>(first, last)(random_); }
@@ -157,7 +158,7 @@ CalendarResult SimulationEngine::submit(const EventData &data, const UserContext
     const auto created = history.isEmpty() ? calendar_.modelTime() : history.first().timestamp;
     auto result = calendar_.checkEvent(data, actor, id);
     if (result.ok() || result.error == CalendarError::Conflict) {
-        if (data.start < created.addSecs(5 * 3600))
+        if (!initializingCalendar_ && data.start < created.addSecs(5 * 3600))
             result = {CalendarError::InvalidTime, QStringLiteral("Между созданием и исполнением должно быть не менее 5 модельных часов.")};
     }
     if ((result.ok() || result.error == CalendarError::Conflict) &&
@@ -170,7 +171,7 @@ CalendarResult SimulationEngine::submit(const EventData &data, const UserContext
     }
     auto accepted = data;
     if (result.error == CalendarError::Conflict && setup_.conflictPolicy != ConflictPolicy::Reject) {
-        request.alternatives = ConflictResolver::alternatives(calendar_, setup_, data, actor, id);
+        request.alternatives = ConflictResolver::alternatives(calendar_, setup_, data, actor, id, previousSchedule_);
         if (!request.alternatives.isEmpty()) {
             if (setup_.conflictPolicy == ConflictPolicy::AutoReschedule) {
                 accepted = request.alternatives.first(); result = {}; request.automatic = true;
@@ -269,7 +270,7 @@ void SimulationEngine::minute(const QDateTime &time)
     calendar_.advanceTo(time, false);
     publishCalendar();
     if (!finished() && workingMinute(time)) {
-        if (setup_.initialMeetings && time >= nextMeetingCreation_) {
+        if (setup_.initialMeetings && previousSchedule_ && time >= nextMeetingCreation_) {
             dailyMeetings();
             scheduleMeetingCreation(time.date().addDays(1));
         }
@@ -479,6 +480,49 @@ CalendarResult SimulationEngine::schedule(ScenarioKind kind)
         data.roomId = pick(rooms);
     }
     return submit(data, systemActor(), 0, kind);
+}
+
+void SimulationEngine::initializeCalendar()
+{
+    // These events were planned before the experiment, so the new-request notice
+    // limit does not apply. All regular plans still pass normal rights/conflict checks.
+    QScopedValueRollback<bool> initialization(initializingCalendar_, true);
+    QScopedValueRollback<bool> internal(internalCommand_, true);
+    const auto &catalog = calendar_.catalog();
+    for (auto date = setup_.startDate; date < calendar_.horizonEnd().date(); date = date.addDays(1)) {
+        if (!setup_.workingDays.value(date.dayOfWeek() - 1)) continue;
+        const auto start = modelDateTime(date, setup_.workStart);
+        QVector<int> leaders;
+        for (const auto &department : catalog.departments) {
+            EventData data;
+            data.title = QStringLiteral("Планерка отдела %1").arg(department.id);
+            data.type = EventType::Planning;
+            data.start = start; data.end = start.addSecs(1800);
+            data.roomId = department.id;
+            data.recurrenceTemplateId = quint64(department.id);
+            for (const auto &employee : catalog.employees)
+                if (employee.departmentId == department.id && employee.available)
+                    data.participantIds.append(employee.id);
+            if (data.participantIds.isEmpty()) continue;
+            data.organizerId = department.leaderId ? department.leaderId : data.participantIds.first();
+            submit(data, systemActor());
+            if (department.leaderId && catalog.employees.value(department.leaderId).available)
+                leaders.append(department.leaderId);
+        }
+        const auto week = date.addDays(1 - date.dayOfWeek());
+        if (!meetingWeeks_.contains(week) && !leaders.isEmpty()) {
+            meetingWeeks_.insert(week);
+            EventData data;
+            data.title = QStringLiteral("Недельное совещание руководителей");
+            data.type = EventType::ManagementMeeting;
+            data.start = start.addSecs(1800); data.end = start.addSecs(3600);
+            data.roomId = setup_.departmentCount + 1;
+            data.participantIds = leaders; data.organizerId = leaders.first();
+            data.recurrenceTemplateId = quint64(setup_.departmentCount + 1);
+            submit(data, systemActor());
+        }
+    }
+    publishCalendar();
 }
 
 void SimulationEngine::scheduleMeetingCreation(QDate date)

@@ -74,7 +74,7 @@ private slots:
         }
         QVERIFY(days.size()>1);
     }
-    void weeklyMeetingUsesAppointedLeaders() {
+    void existingWeeklyMeetingRetainsParticipantsAfterLeaderChange() {
         auto config = setup(); config.initialMeetings = true;
         SimulationEngine engine(config);
         const UserContext actor{1,UserRole::Secretary,{}};
@@ -82,13 +82,12 @@ private slots:
         QVERIFY(engine.transferEmployee(9,3,actor).ok()); // Department 2 has no leader now.
         until(engine,modelDateTime(config.startDate,QTime(18,0)));
         bool found=false;
-        for (const auto &event:engine.calendar().calendar().events) if(event.data.type==EventType::ManagementMeeting) {
+        for (const auto &event:engine.calendar().calendar(CalendarFilter{CalendarScope::All}).events) if(event.data.type==EventType::ManagementMeeting) {
             found=true;
-            QVERIFY(event.data.participantIds.contains(2));
-            QVERIFY(!event.data.participantIds.contains(1));
-            QVERIFY(!event.data.participantIds.contains(9));
-            QVERIFY(!event.data.participantIds.contains(10)); // No substitute chosen from department 2.
-            QCOMPARE(event.data.participantIds.size(),config.departmentCount-1);
+            QVERIFY(event.data.participantIds.contains(1));
+            QVERIFY(!event.data.participantIds.contains(2));
+            QVERIFY(event.data.participantIds.contains(9));
+            QCOMPARE(event.data.participantIds.size(),config.departmentCount);
         }
         QVERIFY(found);
         engine.reset(); QCOMPARE(engine.calendar().catalog().departments.value(1).leaderId,1);
@@ -106,35 +105,63 @@ private slots:
             QCOMPARE(catalog.departments.value(catalog.employees.value(id).departmentId).leaderId,id);
         }
     }
-    void noFutureGenerationAndLivePreset() {
+    void initialCalendarIsReadyBeforeFirstStep() {
         auto config = setup(); config.initialMeetings = true;
         SimulationEngine engine(config);
-        QVERIFY(engine.calendar().calendar().events.isEmpty());
-        QVERIFY(engine.log().isEmpty());
-        until(engine, modelDateTime(config.startDate, QTime(8, 30)));
-        QVERIFY(engine.log().isEmpty());
-        until(engine, modelDateTime(config.startDate, QTime(18, 0)));
-        QCOMPARE(engine.calendar().calendar().events.size(), 2);
-        for (const auto &entry : engine.log()) QVERIFY(entry.time <= engine.calendar().modelTime());
-        for (const auto &event : engine.calendar().calendar().events) QCOMPARE(event.data.start.date(), config.startDate.addDays(1));
-    }
-    void departmentMeetingsUseSeparateDays() {
-        auto config = setup(); config.initialMeetings = true; config.dayCount = 14;
-        SimulationEngine engine(config);
-        until(engine, engine.calendar().horizonEnd());
-        QSet<QDate> days;
-        QSet<quint64> departments;
-        for (const auto &record : engine.calendar().historySince(0)) {
-            const auto &data = record.snapshot.data;
-            if (record.action != CalendarAction::Created || data.type != EventType::Planning ||
-                !data.recurrenceTemplateId) continue;
-            QVERIFY(!days.contains(data.start.date()));
-            days.insert(data.start.date());
-            departments.insert(*data.recurrenceTemplateId);
-            QVERIFY(record.timestamp.secsTo(data.start) >= 5 * 3600);
+        QCOMPARE(engine.calendar().modelTime(), modelDateTime(config.startDate));
+        QVERIFY(!engine.calendar().calendar().events.isEmpty());
+        QVERIFY(!engine.log().isEmpty());
+        const auto initialCount = engine.calendar().calendar().events.size();
+        for (const auto &event : engine.calendar().calendar().events) {
+            QCOMPARE(event.status, EventStatus::Planned);
+            QCOMPARE(engine.calendar().history(event.id).first().timestamp, modelDateTime(config.startDate));
         }
-        QCOMPARE(departments.size(), config.departmentCount);
-        QVERIFY(days.size() >= config.departmentCount);
+        until(engine, modelDateTime(config.startDate, QTime(8, 30)));
+        QCOMPARE(engine.calendar().calendar().events.size(), initialCount);
+        engine.reset();
+        QCOMPARE(engine.calendar().calendar().events.size(), initialCount);
+        config.initialMeetings = false;
+        SimulationEngine empty(config);
+        QVERIFY(empty.calendar().calendar().events.isEmpty());
+    }
+    void everyDepartmentMeetsEveryWorkday() {
+        for (int count : {5, 9}) {
+            auto config = setup(); config.initialMeetings = true; config.dayCount = 14;
+            config.departmentCount = count;
+            // Include a weekend start and a partial first week.
+            config.startDate = QDate(2026, 10, 10);
+            SimulationEngine engine(config);
+            QMap<QDate, QSet<int>> departments;
+            QMap<QDate, int> weekly;
+            for (const auto &event : engine.calendar().calendar().events) {
+                const auto &data = event.data;
+                QVERIFY(data.start.date().dayOfWeek() <= 5);
+                QVERIFY(data.start < engine.calendar().horizonEnd());
+                QVERIFY(engine.calendar().checkEvent(data, {1, UserRole::Secretary, {}}, event.id).ok());
+                if (data.type == EventType::Planning) {
+                    const int department = int(*data.recurrenceTemplateId);
+                    QVERIFY(!departments[data.start.date()].contains(department));
+                    departments[data.start.date()].insert(department);
+                    QCOMPARE(data.roomId.value(), department);
+                    QCOMPARE(data.start.time(), config.workStart);
+                    QCOMPARE(data.start.secsTo(data.end), qint64(1800));
+                    QCOMPARE(data.participantIds.size(), config.employeesPerDepartment);
+                } else if (data.type == EventType::ManagementMeeting) {
+                    ++weekly[data.start.date().addDays(1-data.start.date().dayOfWeek())];
+                    QCOMPARE(data.participantIds.size(), count);
+                    QCOMPARE(data.start.time(), config.workStart.addSecs(1800));
+                }
+            }
+            QCOMPARE(departments.size(), 10);
+            for (const auto &ids : departments) QCOMPARE(ids.size(), count);
+            QCOMPARE(weekly.size(), 2);
+            for (int meetings : weekly) QCOMPARE(meetings, 1);
+            until(engine, engine.calendar().horizonEnd());
+            int created = 0;
+            for (const auto &record : engine.calendar().history())
+                if (record.action == CalendarAction::Created) ++created;
+            QCOMPARE(created, 10 * count + 2); // No duplicate generation during the run.
+        }
     }
     void planNoticeBoundaryAndLifecycle() {
         SimulationEngine engine(setup());
@@ -191,7 +218,7 @@ private slots:
         }
         QVERIFY(hours); QVERIFY(days);
         QVERIFY(intervals.size() > 10);
-        QVERIFY(creationTimes.size() > 10);
+        QCOMPARE(creationTimes.size(), 1); // Initial plans are created at t0.
     }
     void deterministicAcrossStepsAndReset() {
         auto config = setup(); config.requestRatePerWorkday = 25; config.changeRatePerWorkday = 2;

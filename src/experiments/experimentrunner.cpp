@@ -33,7 +33,7 @@ bool ExperimentRunner::advance()
     if (!current_) { auto setup = cases_[caseIndex_].setup; setup.seed += repetition_; current_ = std::make_unique<SimulationEngine>(setup); }
     current_->step();
     if (!current_->finished()) {
-        // Explicit, reproducible decision rule for batch Suggest; interactive mode still asks a user.
+        // Explicit, reproducible batch rule for Suggest; the interactive window leaves the choice to the user.
         QVector<quint64> pending;
         for (const auto &request : current_->requests()) if (request.pending) pending.append(request.id);
         for (auto id : pending) current_->acceptSuggestion(id, 0);

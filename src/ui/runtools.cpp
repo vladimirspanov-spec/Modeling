@@ -31,38 +31,65 @@ void row(QTableWidget *table, const QStringList &values, quint64 id = 0) {
 }
 }
 RunTools::RunTools(SimulationEngine &engine, std::function<void()> pause, std::function<void()> changed,
-    std::function<void(EventId)> openEvent, QWidget *parent)
-    : QWidget(parent), engine_(engine), pause_(std::move(pause)), changed_(std::move(changed))
+    std::function<UserContext()> actor, std::function<void(EventId)> openEvent,
+    std::function<void(const RequestRecord &)> editRequest, QWidget *parent)
+    : QWidget(parent), engine_(engine), pause_(std::move(pause)), changed_(std::move(changed)), actor_(std::move(actor))
 {
     auto *layout = new QVBoxLayout(this);
     auto *tabs = new QTabWidget(this); layout->addWidget(tabs);
     auto *requestPage = new QWidget; auto *requestLayout = new QVBoxLayout(requestPage);
     requests_ = table({tr("№"), tr("Время заявки"), tr("Мероприятие"), tr("Результат")}, this); requests_->setObjectName("requestsTable");
     requestLayout->addWidget(requests_);
-    auto *buttons = new QHBoxLayout; requestLayout->addLayout(buttons);
-    auto *accept = new QPushButton(tr("Выбрать вариант…")); auto *reject = new QPushButton(tr("Отклонить предложения"));
-    buttons->addWidget(accept); buttons->addWidget(reject);
-    tabs->addTab(requestPage, tr("Заявки"));
-    connect(accept, &QPushButton::clicked, this, [this] {
-        const int selected = requests_->currentRow(); if (selected < 0) return;
-        const auto id = requests_->item(selected, 0)->data(Qt::UserRole).toULongLong();
-        const auto request = engine_.requests().value(int(id - 1)); if (!request.pending) return;
-        pause_(); QStringList choices;
-        for (int i = 0; i < request.alternatives.size(); ++i) {
-            const auto &e = request.alternatives[i]; choices.append(tr("%1. %2 — %3; помещение %4").arg(i + 1)
-                .arg(e.start.toString("dd.MM HH:mm"), e.end.toString("dd.MM HH:mm"), e.roomId ? QString::number(*e.roomId) : tr("нет")));
+    auto *actions = new QHBoxLayout; requestLayout->addLayout(actions);
+    auto *accept = new QPushButton(tr("Выбрать вариант…")); accept->setObjectName("acceptSuggestion");
+    auto *edit = new QPushButton(tr("Редактировать заявку…")); edit->setObjectName("editRequest");
+    actions->addWidget(accept); actions->addWidget(edit);
+    auto selectedRequest = [this]() -> std::optional<RequestRecord> {
+        const int row = requests_->currentRow();
+        if (row < 0 || !requests_->item(row, 0) || engine_.finished()) return std::nullopt;
+        const auto id = requests_->item(row, 0)->data(Qt::UserRole).toULongLong();
+        if (!id || id > quint64(engine_.requests().size())) return std::nullopt;
+        const auto request = engine_.requests()[int(id - 1)];
+        if (!request.pending) return std::nullopt;
+        const auto permission = engine_.calendar().checkEvent(request.requested, actor_(), request.editedEvent);
+        if (permission.error == CalendarError::PermissionDenied) return std::nullopt;
+        return request;
+    };
+    auto updateActions = [accept, edit, selectedRequest] {
+        const bool available = selectedRequest().has_value();
+        accept->setEnabled(available); edit->setEnabled(available);
+    };
+    connect(requests_, &QTableWidget::itemSelectionChanged, this, updateActions);
+    updateActions();
+    connect(accept, &QPushButton::clicked, this, [this, selectedRequest] {
+        const auto request = selectedRequest(); if (!request) return;
+        pause_(); QStringList choices; QVector<int> indices;
+        for (int i = 0; i < request->alternatives.size(); ++i) {
+            const auto &data = request->alternatives[i];
+            if (engine_.calendar().checkEvent(data, actor_(), request->editedEvent).error == CalendarError::PermissionDenied) continue;
+            indices.append(i);
+            choices.append(tr("%1. %2 — %3; помещение %4").arg(i+1)
+                .arg(data.start.toString("dd.MM HH:mm"), data.end.toString("dd.MM HH:mm"),
+                     data.roomId ? QString::number(*data.roomId) : tr("нет")));
         }
-        bool ok; const auto chosen = QInputDialog::getItem(this, tr("Варианты переноса"), tr("Доступность будет проверена повторно"), choices, 0, false, &ok);
+        if (choices.isEmpty()) {
+            QMessageBox::information(this, tr("Варианты переноса"), tr("Нет вариантов, доступных для вашей роли. Измените заявку."));
+            changed_(); return;
+        }
+        bool ok = false;
+        const auto chosen = QInputDialog::getItem(this, tr("Варианты переноса"),
+            tr("Доступность будет проверена повторно"), choices, 0, false, &ok);
         if (ok) {
-            auto result = engine_.acceptSuggestion(id, choices.indexOf(chosen));
+            const auto result = engine_.acceptSuggestion(request->id, indices.value(choices.indexOf(chosen), -1));
             if (!result.ok()) QMessageBox::information(this, tr("Результат"), result.message);
-            changed_();
         }
+        changed_();
     });
-    connect(reject, &QPushButton::clicked, this, [this] {
-        if (requests_->currentRow() < 0) return; pause_();
-        engine_.rejectSuggestion(requests_->item(requests_->currentRow(), 0)->data(Qt::UserRole).toULongLong()); changed_();
+    connect(edit, &QPushButton::clicked, this, [this, selectedRequest, editRequest] {
+        const auto request = selectedRequest(); if (!request) return;
+        pause_(); engine_.rejectSuggestion(request->id); changed_(); editRequest(*request);
     });
+    tabs->addTab(requestPage, tr("Заявки"));
     auto *mailPage = new QWidget;
     auto *mailLayout = new QVBoxLayout(mailPage);
     emails_ = table({tr("Плановое время"), tr("Отправлено"), tr("Доставлено (имитация)"), tr("Адресаты"), tr("Тема")}, mailPage);
@@ -132,6 +159,13 @@ void RunTools::refresh()
     requests_->setRowCount(0);
     for (const auto &r : engine_.requests()) {
         QString status = r.pending ? tr("Ожидает выбора") : r.selected ? tr("Вариант выбран, создана новая попытка") : r.result.ok() ? tr("Принята") : r.result.message;
+        QStringList reasons;
+        if (r.participantConflict) reasons.append(tr("заняты участники"));
+        if (r.roomConflict) reasons.append(tr("занято помещение"));
+        QStringList ids;
+        for (auto id : r.result.conflicts) ids.append(QString::number(id));
+        if (!ids.isEmpty()) reasons.append(tr("события № %1").arg(ids.join(", ")));
+        if (!reasons.isEmpty()) status += " · " + reasons.join("; ");
         row(requests_, {QString::number(r.id), r.time.toString("dd.MM HH:mm"), r.requested.title, status}, r.id);
         if (r.id == selected) requests_->selectRow(requests_->rowCount() - 1);
     }

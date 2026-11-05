@@ -80,7 +80,7 @@ Widget::Widget(QWidget *parent) : QWidget(parent)
     company->addRow(rooms);
 
     auto *scenario = page(tr("Сценарий"));
-    addChoice(scenario, "initialCalendar", tr("Регулярные планы во время прогона"), {tr("Планерки отделов по очереди и недельные совещания"), tr("Пустой календарь")}, {"planningAndWeeklyMeetings", "empty"}, 0);
+    addChoice(scenario, "initialCalendar", tr("Начальный календарь"), {tr("Ежедневные планерки всех отделов и недельные совещания"), tr("Пустой календарь")}, {"planningAndWeeklyMeetings", "empty"}, 0);
     addDecimal(scenario, "requestRatePerWorkday", tr("Случайных событий за рабочий день, на фирму"), 6);
     addDecimal(scenario, "changeRatePerWorkday", tr("Изменений за рабочий день, на фирму"), 1);
     addInteger(scenario, "leadTimeMinWorkdays", tr("Дальний срок: минимум рабочих дней"), 0, 365, 1);
@@ -127,7 +127,7 @@ Widget::Widget(QWidget *parent) : QWidget(parent)
     reminders->addRow(note);
 
     auto *experiment = page(tr("Конфликты и эксперимент"));
-    addChoice(experiment, "conflictPolicy", tr("Политика конфликтов"), {tr("Отклонять заявку"), tr("Предлагать варианты"), tr("Автоматически переносить")}, {"Reject", "Suggest", "AutoReschedule"}, 1);
+    addChoice(experiment, "conflictPolicy", tr("Политика конфликтов"), {tr("Отклонять заявку"), tr("Предлагать варианты пользователю"), tr("Автоматически переносить")}, {"Reject", "Suggest", "AutoReschedule"}, 1);
     addInteger(experiment, "rescheduleWindowWorkdays", tr("Горизонт поиска, рабочих дней"), 0, 365, 5);
     addInteger(experiment, "maxSuggestions", tr("Максимум предложений"), 1, 1000, 3);
     addChoice(experiment, "actorRole", tr("Роль пользователя"), {tr("Сотрудник"), tr("Руководитель"), tr("Секретарь")}, {"Employee", "Manager", "Secretary"}, 2);
@@ -329,7 +329,7 @@ CalendarSetup Widget::currentSetup() const
     setup.workStart = workStart->time();
     setup.workEnd = workEnd->time();
     setup.initialMeetings = choices.value("initialCalendar")->currentData().toString() == "planningAndWeeklyMeetings";
-    setup.role = static_cast<UserRole>(choices.value("actorRole")->currentIndex());
+    setup.role = UserRole(choices.value("actorRole")->currentIndex());
     setup.seed = seed->text().toUInt();
     setup.requestRatePerWorkday = decimals.value("requestRatePerWorkday")->value();
     setup.changeRatePerWorkday = decimals.value("changeRatePerWorkday")->value();
@@ -374,7 +374,8 @@ void Widget::applySetup(const CalendarSetup &s)
     for (int i = 0; i < 7; ++i) workingDays[i]->setChecked(s.workingDays[i]);
     choices.value("stepMinutes")->setCurrentIndex(s.stepMinutes == 30 ? 0 : 1);
     choices.value("initialCalendar")->setCurrentIndex(s.initialMeetings ? 0 : 1);
-    choices.value("actorRole")->setCurrentIndex(int(s.role)); choices.value("conflictPolicy")->setCurrentIndex(int(s.conflictPolicy));
+    choices.value("actorRole")->setCurrentIndex(int(s.role));
+    choices.value("conflictPolicy")->setCurrentIndex(int(s.conflictPolicy));
     choices.value("periodicSeminars")->setCurrentIndex(s.periodicSeminars ? 0 : 1);
     seminarTime->setTime(s.seminarTime);
     updateSummary();

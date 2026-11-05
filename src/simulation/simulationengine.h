@@ -54,7 +54,7 @@ struct RequestRecord {
 // No widgets or wall-clock dependency. All modes call this same step().
 class SimulationEngine {
 public:
-    explicit SimulationEngine(CalendarSetup setup, bool legacySchedule = false);
+    explicit SimulationEngine(CalendarSetup setup, bool legacySchedule = false, bool previousSchedule = false);
     CalendarResult step();
     void reset();
     const CalendarSetup &setup() const { return setup_; }
@@ -72,8 +72,8 @@ public:
     const QMap<int, ParticipantState> &participants() const { return participants_; }
     const QMap<int, OrganizationState> &organizations() const { return organizations_; }
     static const QVector<ScenarioDefinition> &eventCatalog();
-    static QString generatorVersion() { return QStringLiteral("live-minute-v5"); }
-    QString modelVersion() const { return legacySchedule_ ? QStringLiteral("live-minute-v4") : generatorVersion(); }
+    static QString generatorVersion() { return QStringLiteral("daily-calendar-v6"); }
+    QString modelVersion() const { return legacySchedule_ ? QStringLiteral("live-minute-v4") : previousSchedule_ ? QStringLiteral("live-minute-v5") : generatorVersion(); }
     CalendarResult createEvent(const EventData &data, const UserContext &actor);
     CalendarResult updateEvent(EventId id, const EventData &data, const UserContext &actor);
     CalendarResult cancelEvent(EventId id, const UserContext &actor);
@@ -91,6 +91,7 @@ private:
     void publishCalendar();
     void append(const QString &description, std::optional<ScenarioKind> kind = {}, std::optional<EventId> event = {});
     void dailyMeetings();
+    void initializeCalendar();
     void periodicSeminar();
     void scheduleMeetingCreation(QDate date);
     bool workingMinute(const QDateTime &time) const;
@@ -113,6 +114,8 @@ private:
     QDateTime nextMeetingCreation_;
     int nextMeetingDepartment_ = 1;
     bool initialized_ = false;
+    bool previousSchedule_ = false;
+    bool initializingCalendar_ = false;
     bool legacySchedule_ = false; // Preserve meeting rules when replaying v4 saves.
     QDate nextSeminarDate_;
     bool internalCommand_ = false;

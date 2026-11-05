@@ -2,7 +2,7 @@
 #include <algorithm>
 
 QVector<EventData> ConflictResolver::alternatives(const CalendarService &calendar, const CalendarSetup &setup,
-    const EventData &requested, const UserContext &actor, EventId id)
+    const EventData &requested, const UserContext &actor, EventId id, bool separatePlanningDays)
 {
     QVector<EventData> result;
     const qint64 duration = requested.start.secsTo(requested.end);
@@ -23,7 +23,7 @@ QVector<EventData> ConflictResolver::alternatives(const CalendarService &calenda
                 auto candidate = requested;
                 candidate.start = start; candidate.end = start.addSecs(duration); candidate.roomId = room;
                 bool occupiedDay = false;
-                if (candidate.type == EventType::Planning && candidate.recurrenceTemplateId)
+                if (separatePlanningDays && candidate.type == EventType::Planning && candidate.recurrenceTemplateId)
                     for (const auto &other : calendar.calendar().events)
                         if (other.id != id && other.data.type == EventType::Planning && other.data.recurrenceTemplateId &&
                             other.data.start.date() == candidate.start.date()) occupiedDay = true;
