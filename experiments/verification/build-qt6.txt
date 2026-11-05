@@ -1,0 +1,34 @@
+[  0%] Built target calendar_core_autogen_timestamp_deps
+[  1%] Automatic MOC for target calendar_core
+[  1%] Built target calendar_core_autogen
+[  3%] Building CXX object CMakeFiles/calendar_core.dir/src/services/calendarsetup.cpp.o
+[  5%] Building CXX object CMakeFiles/calendar_core.dir/src/services/calendarservice.cpp.o
+[  7%] Linking CXX static library libcalendar_core.a
+[ 25%] Built target calendar_core
+[ 25%] Built target modeling_experiments_autogen_timestamp_deps
+[ 25%] Built target calendar_ui_autogen_timestamp_deps
+[ 25%] Built target calendarservice_test_autogen_timestamp_deps
+[ 25%] Built target simulationengine_test_autogen_timestamp_deps
+[ 25%] Built target completion_test_autogen_timestamp_deps
+[ 26%] Built target calendar_ui_autogen
+[ 28%] Built target modeling_experiments_autogen
+[ 30%] Built target calendarservice_test_autogen
+[ 32%] Built target simulationengine_test_autogen
+[ 34%] Built target completion_test_autogen
+[ 50%] Built target calendar_ui
+[ 51%] Linking CXX executable modeling_experiments
+[ 53%] Linking CXX executable calendarservice_test
+[ 59%] Built target calendarservice_test
+[ 65%] Built target modeling_experiments
+[ 67%] Linking CXX executable simulationengine_test
+[ 69%] Linking CXX executable completion_test
+[ 75%] Built target simulationengine_test
+[ 75%] Built target calendarwindow_test_autogen_timestamp_deps
+[ 80%] Built target completion_test
+[ 80%] Built target Modeling_autogen_timestamp_deps
+[ 82%] Built target Modeling_autogen
+[ 84%] Built target calendarwindow_test_autogen
+[ 86%] Linking CXX executable Modeling
+[ 88%] Linking CXX executable calendarwindow_test
+[ 94%] Built target Modeling
+[100%] Built target calendarwindow_test

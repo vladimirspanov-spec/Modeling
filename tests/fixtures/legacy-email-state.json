@@ -1,0 +1,107 @@
+{
+    "calendar": [
+        {
+            "end": "2026-10-12T11:00:00+03:00",
+            "id": "1",
+            "importance": 1,
+            "organizer": 1,
+            "participantCodes": {
+                "1": "1_01",
+                "2": "1_02"
+            },
+            "participants": [
+                1,
+                2
+            ],
+            "scheduleVersion": "1",
+            "start": "2026-10-12T10:00:00+03:00",
+            "status": 0,
+            "title": "Legacy reminder",
+            "type": 4,
+            "version": "1"
+        }
+    ],
+    "commands": [
+        {
+            "actor": {
+                "departments": [
+                ],
+                "employee": 1,
+                "role": 2
+            },
+            "data": {
+                "end": "2026-10-12T11:00:00+03:00",
+                "importance": 1,
+                "organizer": 1,
+                "participants": [
+                    1,
+                    2
+                ],
+                "start": "2026-10-12T10:00:00+03:00",
+                "title": "Legacy reminder",
+                "type": 4
+            },
+            "op": "create",
+            "time": "2026-10-12T00:00:00+03:00"
+        },
+        {
+            "op": "step",
+            "time": "2026-10-12T00:00:00+03:00"
+        }
+    ],
+    "configuration": {
+        "animationTickMs": 250,
+        "changeRatePerWorkday": 0,
+        "conflictPolicy": 0,
+        "dayCount": 14,
+        "departmentCount": 6,
+        "employeesPerDepartment": 8,
+        "importanceWeights": [
+            0.5,
+            0.35,
+            0.15
+        ],
+        "initialMeetings": false,
+        "leadTimeMaxWorkdays": 5,
+        "leadTimeMinWorkdays": 1,
+        "maxSuggestions": 3,
+        "participantsMax": 8,
+        "participantsMin": 2,
+        "reminders": [
+            {
+                "leadDays": 1,
+                "periodHours": 24
+            },
+            {
+                "leadDays": 2,
+                "periodHours": 24
+            },
+            {
+                "leadDays": 4,
+                "periodHours": 24
+            }
+        ],
+        "repetitions": 20,
+        "requestRatePerWorkday": 0,
+        "rescheduleWindowWorkdays": 5,
+        "role": 2,
+        "seed": 42,
+        "startDate": "2026-10-12",
+        "stepMinutes": 30,
+        "workEnd": "18:00:00",
+        "workStart": "09:00:00",
+        "workingDays": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false
+        ]
+    },
+    "fingerprint": "bf423a1166f7ef5328d03530026b66bf82187d3509732aaf773b26f65c676b67",
+    "format": "SecretarySimulation",
+    "generator": "live-minute-v4",
+    "schemaVersion": 1
+}

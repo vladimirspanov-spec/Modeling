@@ -9,6 +9,7 @@ class QScrollArea;
 class QComboBox;
 class QSpinBox;
 class QDateEdit;
+class QTimeEdit;
 class QPushButton;
 class QTimer;
 class QTableWidget;
@@ -16,11 +17,13 @@ class QTabWidget;
 class QCheckBox;
 class QGraphicsScene;
 class OfficeAnimator;
+class RunTools;
 
 class SimulationWindow : public QWidget
 {
 public:
     explicit SimulationWindow(const CalendarSetup &setup, QWidget *parent = nullptr);
+    void restoreState(SimulationEngine engine);
     const CalendarService &calendarService() const { return engine_.calendar(); }
     const SimulationEngine &simulationEngine() const { return engine_; }
 
@@ -34,6 +37,7 @@ private:
     void updateSpeed();
     void refreshJournalAndState();
     void transferParticipant();
+    void assignDepartmentLeader();
     void refreshOffice();
     CalendarSetup setup_;
     SimulationEngine engine_;
@@ -47,6 +51,8 @@ private:
     QComboBox *status_;
     QDateEdit *from_;
     QDateEdit *to_;
+    QCheckBox *filterHours_;
+    QTimeEdit *hourFrom_, *hourTo_;
     QPushButton *stepButton_;
     QPushButton *addButton_;
     QPushButton *startButton_;
@@ -63,6 +69,7 @@ private:
     QString officeCatalogSignature_;
     OfficeAnimator *officeAnimator_;
     bool animateOfficeStep_ = false;
+    RunTools *runTools_ = nullptr;
     int displayedLogCount_ = 0;
 };
 

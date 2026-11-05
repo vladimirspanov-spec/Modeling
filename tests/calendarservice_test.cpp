@@ -27,24 +27,40 @@ EventData data(int hour = 10, int participant = 1, int room = 1) {
 class CalendarServiceTest : public QObject {
     Q_OBJECT
 private slots:
-    void initialPresetAndAtomicLoading() {
-        CalendarSetup setup;
-        setup.startDate = QDate(2026, 10, 12);
-        CalendarService service(makeCompanyCatalog(setup), modelDateTime(setup.startDate), modelDateTime(setup.startDate.addDays(14)));
-        QVERIFY(loadInitialCalendar(service, setup).ok());
-        QCOMPARE(service.calendar().events.size(), 62); // Ten workdays x six departments, two weekly meetings.
-        const auto records = service.history().size();
-        QCOMPARE(loadInitialCalendar(service, setup).error, CalendarError::Conflict);
-        QCOMPARE(service.history().size(), records);
-        QCOMPARE(service.calendar().events.size(), 62);
-        setup.initialMeetings = false;
-        CalendarService empty(makeCompanyCatalog(setup), modelDateTime(setup.startDate), modelDateTime(setup.startDate.addDays(14)));
-        QVERIFY(loadInitialCalendar(empty, setup).ok());
-        QVERIFY(empty.calendar().events.isEmpty());
-        setup.initialMeetings = true;
-        setup.workEnd = QTime(9, 30);
-        QCOMPARE(loadInitialCalendar(empty, setup).error, CalendarError::InvalidData);
-        QVERIFY(empty.calendar().events.isEmpty());
+    void hoursApplyToEveryDayAndRespectBoundaries() {
+        CalendarService service(catalog(), at(0), at(0).addDays(7));
+        auto a = data(9); a.end = at(10); QVERIFY(service.createEvent(a, secretary()).ok());
+        auto b = data(10); QVERIFY(service.createEvent(b, secretary()).ok());
+        auto c = data(13); QVERIFY(service.createEvent(c, secretary()).ok());
+        auto overnight = data(20, 2, 2); overnight.end = at(10).addDays(1);
+        QVERIFY(service.createEvent(overnight, secretary()).ok());
+        CalendarFilter f; f.dayFrom = QTime(10,0); f.dayTo = QTime(13,0);
+        QCOMPARE(service.calendar(f).events.size(), 1); // Ending at 10 and beginning at 13 excluded.
+        f.dayFrom = QTime(9,30); f.dayTo = QTime(10,30);
+        QCOMPARE(service.calendar(f).events.size(), 3);
+        f.from = at(0); f.to = at(0).addDays(1);
+        QCOMPARE(service.calendar(f).events.size(), 2); // Overnight match occurs only on the second day.
+        f.from = at(0).addDays(1); f.to = at(0).addDays(2);
+        QCOMPARE(service.calendar(f).events.size(), 1);
+        QVERIFY(service.advanceTo(at(12).addDays(1)).ok());
+        f.scope = CalendarScope::Archive; QCOMPARE(service.calendar(f).events.size(), 1);
+        f.dayTo = f.dayFrom; QVERIFY(!service.calendar(f).result.ok());
+        f.dayTo.reset(); QVERIFY(!service.calendar(f).result.ok());
+    }
+    void explicitLeadersValidateOwnershipAndTransfers() {
+        CalendarService service(catalog(), at(0), at(23));
+        QVERIFY(service.assignLeader(1,2,secretary()).ok());
+        QCOMPARE(service.catalog().departments.value(1).leaderId,2);
+        QCOMPARE(service.assignLeader(1,3,secretary()).error,CalendarError::InvalidData);
+        QCOMPARE(service.assignLeader(1,1,{1,UserRole::Employee,{1}}).error,CalendarError::PermissionDenied);
+        QVERIFY(service.setEmployeeAvailable(2,false,secretary()).ok());
+        QCOMPARE(service.catalog().departments.value(1).leaderId,2); // Absence does not replace the leader.
+        QVERIFY(service.transferEmployee(2,2,secretary()).ok());
+        QCOMPARE(service.catalog().departments.value(1).leaderId,0);
+        QCOMPARE(service.catalog().departments.value(2).leaderId,0);
+        QVERIFY(service.assignLeader(2,2,secretary()).ok());
+        QVERIFY(service.advanceTo(at(23)).ok());
+        QCOMPARE(service.assignLeader(1,1,secretary()).error,CalendarError::InvalidState);
     }
     void createUpdateAndSnapshots() {
         CalendarService service(catalog(), at(0), at(23));

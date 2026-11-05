@@ -27,6 +27,10 @@ CalendarService::CalendarService(CompanyCatalog catalog, QDateTime start, QDateT
     for (auto it = catalog_.rooms.cbegin(); it != catalog_.rooms.cend(); ++it)
         if (it.key() <= 0 || it->id != it.key() || (it->departmentId && !catalog_.departments.contains(*it->departmentId)))
             throw std::invalid_argument("Invalid room");
+    for (const auto &department : catalog_.departments)
+        if (department.leaderId && (!catalog_.employees.contains(department.leaderId) ||
+            catalog_.employees.value(department.leaderId).departmentId != department.id))
+            throw std::invalid_argument("Department leader must belong to the department");
     QSet<QString> codes;
     const QRegularExpression format(QStringLiteral("^([1-9][0-9]*)_([0-9]{2,})$"));
     for (auto &employee : catalog_.employees) {
@@ -120,11 +124,25 @@ void CalendarService::startIfDue(EventId id)
     }
 }
 
+CalendarResult CalendarService::checkEvent(const EventData &data, const UserContext &actor, EventId id) const
+{
+    if (!id) {
+        if (!validActor(actor) || (actor.role != UserRole::Secretary && data.organizerId != actor.employeeId))
+            return failure(CalendarError::PermissionDenied, QStringLiteral("Недостаточно прав для создания события."));
+    } else {
+        const auto existing = event(id);
+        if (!existing) return failure(CalendarError::NotFound, QStringLiteral("Событие не найдено."), id);
+        if (!canModify(existing->data, actor) || !canModify(data, actor))
+            return failure(CalendarError::PermissionDenied, QStringLiteral("Недостаточно прав для изменения события."), id);
+        if (existing->status != EventStatus::Planned)
+            return failure(CalendarError::InvalidState, QStringLiteral("Изменять можно только запланированные события."), id);
+    }
+    return validate(data, id);
+}
+
 CalendarResult CalendarService::createEvent(const EventData &data, const UserContext &actor)
 {
-    if (!validActor(actor) || (actor.role != UserRole::Secretary && data.organizerId != actor.employeeId))
-        return failure(CalendarError::PermissionDenied, QStringLiteral("Недостаточно прав для создания события от имени организатора."));
-    auto result = validate(data);
+    auto result = checkEvent(data, actor);
     if (!result.ok()) return result;
     CalendarEvent event;
     event.id = nextId_++;
@@ -139,14 +157,9 @@ CalendarResult CalendarService::createEvent(const EventData &data, const UserCon
 
 CalendarResult CalendarService::updateEvent(EventId id, const EventData &data, const UserContext &actor)
 {
-    const auto existing = event(id);
-    if (!existing) return failure(CalendarError::NotFound, QStringLiteral("Событие не найдено."), id);
-    if (!canModify(existing->data, actor)) return failure(CalendarError::PermissionDenied, QStringLiteral("Недостаточно прав для изменения события."), id);
-    if (existing->status != EventStatus::Planned)
-        return failure(CalendarError::InvalidState, QStringLiteral("Изменять можно только запланированные события."), id);
-    auto result = validate(data, id);
+    auto result = checkEvent(data, actor, id);
     if (!result.ok()) return result;
-    if (!canModify(data, actor)) return failure(CalendarError::PermissionDenied, QStringLiteral("Нет полномочий на все затронутые отделы."), id);
+    const auto existing = event(id);
     auto changed = *existing;
     ++changed.version;
     QSet<int> before, after;
@@ -199,6 +212,8 @@ CalendarQueryResult CalendarService::calendar(const CalendarFilter &filter) cons
 {
     CalendarQueryResult result;
     if ((filter.from && !filter.from->isValid()) || (filter.to && !filter.to->isValid()) ||
+        (filter.dayFrom.has_value() != filter.dayTo.has_value()) ||
+        (filter.dayFrom && (!filter.dayFrom->isValid() || !filter.dayTo->isValid() || *filter.dayFrom >= *filter.dayTo)) ||
         (filter.from && filter.to && *filter.from >= *filter.to) ||
         (filter.departmentId && !catalog_.departments.contains(*filter.departmentId)) ||
         (filter.employeeId && !catalog_.employees.contains(*filter.employeeId)) ||
@@ -213,6 +228,15 @@ CalendarQueryResult CalendarService::calendar(const CalendarFilter &filter) cons
             const auto &data = event.data;
             if (filter.from && data.end <= *filter.from) continue;
             if (filter.to && data.start >= *filter.to) continue;
+            if (filter.dayFrom) {
+                const auto begin = filter.from ? std::max(data.start, *filter.from) : data.start;
+                const auto end = filter.to ? std::min(data.end, *filter.to) : data.end;
+                auto date = begin.toOffsetFromUtc(10800).date();
+                if (begin >= QDateTime(date, *filter.dayTo, Qt::OffsetFromUTC, 10800)) date = date.addDays(1);
+                const auto windowStart = QDateTime(date, *filter.dayFrom, Qt::OffsetFromUTC, 10800);
+                const auto windowEnd = QDateTime(date, *filter.dayTo, Qt::OffsetFromUTC, 10800);
+                if (begin >= windowEnd || windowStart >= end) continue;
+            }
             if (filter.departmentId && !event.participantDepartments.values().contains(*filter.departmentId)) continue;
             if (filter.employeeId && !data.participantIds.contains(*filter.employeeId)) continue;
             if (filter.roomId && data.roomId != filter.roomId) continue;
@@ -298,10 +322,12 @@ CalendarResult CalendarService::transferEmployee(int id, int department, const U
     if (!validActor(actor) || actor.role != UserRole::Secretary)
         return failure(CalendarError::PermissionDenied, QStringLiteral("Перевод доступен секретарю."));
     if (!catalog_.employees.contains(id) || !catalog_.departments.contains(department))
-        return failure(CalendarError::InvalidData, QStringLiteral("Участник или организация не найдены."));
+        return failure(CalendarError::InvalidData, QStringLiteral("Участник или отдел не найдены."));
     if (time_ >= horizonEnd_ || employeeBusy(id) || catalog_.employees.value(id).departmentId == department)
         return failure(CalendarError::InvalidState, QStringLiteral("Перевод сейчас невозможен."));
     auto &employee = catalog_.employees[id];
+    if (catalog_.departments[employee.departmentId].leaderId == id)
+        catalog_.departments[employee.departmentId].leaderId = 0;
     employee.departmentId = department;
     employee.publicId = QStringLiteral("%1_%2").arg(department).arg(++nextParticipantNumber_[department], 2, 10, QChar('0'));
     for (auto &event : active_) {
@@ -311,6 +337,19 @@ CalendarResult CalendarService::transferEmployee(int id, int department, const U
             record(event, CalendarAction::Updated, time_, actor.employeeId);
         }
     }
+    return {};
+}
+
+CalendarResult CalendarService::assignLeader(int department, int employee, const UserContext &actor)
+{
+    if (!validActor(actor) || actor.role != UserRole::Secretary)
+        return failure(CalendarError::PermissionDenied, QStringLiteral("Назначение руководителя доступно секретарю."));
+    if (!catalog_.departments.contains(department) || !catalog_.employees.contains(employee) ||
+        catalog_.employees.value(employee).departmentId != department)
+        return failure(CalendarError::InvalidData, QStringLiteral("Выберите сотрудника этого отдела."));
+    if (time_ >= horizonEnd_)
+        return failure(CalendarError::InvalidState, QStringLiteral("Прогон завершен."));
+    catalog_.departments[department].leaderId = employee;
     return {};
 }
 

@@ -34,17 +34,11 @@ Thumbs.db
 *.rc
 /.qmake.cache
 /.qmake.stash
-<<<<<<< HEAD
 **/.qmlls.ini
 
 # qtcreator generated files
 *.pro.user*
 *.qbs.user*
-=======
-
-# qtcreator generated files
-*.pro.user*
->>>>>>> 19d33f3 (added calender system)
 CMakeLists.txt.user*
 
 # xemacs temporary files
@@ -80,7 +74,6 @@ CMakeLists.txt.user*
 *.dll
 *.exe
 
-<<<<<<< HEAD
 # Directories with generated files
 .moc/
 .obj/
@@ -89,5 +82,9 @@ CMakeLists.txt.user*
 .uic/
 /build*/
 /.qtcreator/
-=======
->>>>>>> 19d33f3 (added calender system)
+
+# LaTeX intermediate files
+*.aux
+*.log
+*.toc
+*.out

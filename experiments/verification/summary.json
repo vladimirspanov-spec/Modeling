@@ -1,0 +1,27 @@
+{
+  "qt6": {
+    "build": "passed",
+    "testSuites": 4,
+    "failed": 0
+  },
+  "qt5": {
+    "build": "passed",
+    "testSuites": 4,
+    "failed": 0
+  },
+  "scenarioReplay": "full report matches example-report.json",
+  "experimentRuns": 120,
+  "report": {
+    "pages": 13,
+    "format": "A4 PDF",
+    "diagramsAndTables": false
+  },
+  "sourceSpecification": "Original DOCX unavailable; README/MODEL and user requirements used",
+  "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "cmake": "cmake version 3.28.3",
+  "sha256": {
+    "experiments/results/comparison.json": "c342fe1c87418f21c0e7b68883e07816fc69c48328f4c7f2f3bff46c73e85f8f",
+    "experiments/results/example-state.json": "4cbed1433fee2001ff3a3ef78e92253ae37e7ba9358a4e1fbf3123e1aa01b490",
+    "documentation/report/report.pdf": "2aaecc629d9575594b0c4c76afe66531d40871f5844e87757dea5592514a1c71"
+  }
+}

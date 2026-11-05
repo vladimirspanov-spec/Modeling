@@ -13,12 +13,12 @@ enum class EventType { Planning, ManagementMeeting, Seminar, BusinessTrip, Other
 enum class Importance { Low, Medium, High };
 enum class UserRole { Employee, Manager, Secretary };
 
-struct Department { int id; QString name; };
+struct Department { int id; QString name; int leaderId = 0; }; // 0 means a vacant position.
 struct Employee {
     int id; // Stable internal key: calendar references survive transfers.
     QString name;
     int departmentId;
-    QString publicId; // Organization_sequence, never reused during a run.
+    QString publicId; // Department_sequence, never reused during a run.
     bool available = true;
 };
 struct Room { int id; QString name; std::optional<int> departmentId; };
@@ -72,6 +72,7 @@ struct CalendarResult {
     QString message;
     EventId eventId = 0;
     QVector<EventId> conflicts;
+    quint64 requestId = 0;
     bool ok() const { return error == CalendarError::None; }
 };
 
@@ -84,6 +85,8 @@ struct CalendarFilter {
     std::optional<EventStatus> status;
     std::optional<QDateTime> from;
     std::optional<QDateTime> to; // Intersection with [from, to), not just start dates.
+    std::optional<QTime> dayFrom; // Optional daily window, applied on each selected date.
+    std::optional<QTime> dayTo;
 };
 struct CalendarQueryResult {
     CalendarResult result;

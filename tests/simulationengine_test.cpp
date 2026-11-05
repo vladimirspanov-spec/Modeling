@@ -7,7 +7,7 @@ CalendarSetup setup(int step = 30) {
     value.startDate = QDate(2026, 10, 12);
     value.dayCount = 7;
     value.stepMinutes = step;
-    value.initialMeetings = false;
+    value.initialMeetings = false; value.periodicSeminars = false;
     value.requestRatePerWorkday = 0;
     value.changeRatePerWorkday = 0;
     return value;
@@ -25,6 +25,87 @@ QStringList transcript(const SimulationEngine &engine) {
 class SimulationEngineTest : public QObject {
     Q_OBJECT
 private slots:
+    void recurringSeminarsAreCreatedGraduallyAndRepeat() {
+        auto config = setup(); config.periodicSeminars = true; config.dayCount = 21;
+        SimulationEngine engine(config);
+        QVERIFY(engine.calendar().calendar().events.isEmpty());
+        until(engine,modelDateTime(config.startDate,QTime(8,30)));
+        QVERIFY(engine.calendar().calendar().events.isEmpty());
+        until(engine,modelDateTime(config.startDate,QTime(9,0)));
+        QCOMPARE(engine.calendar().calendar().events.size(),1);
+        const auto first = engine.calendar().calendar().events.first();
+        QCOMPARE(first.data.start,modelDateTime(config.startDate.addDays(2),QTime(14,0)));
+        QCOMPARE(first.data.end,first.data.start.addSecs(90*60));
+        QCOMPARE(first.status,EventStatus::Planned);
+        QSet<int> departments;
+        for (int id:first.data.participantIds) departments.insert(engine.calendar().catalog().employees.value(id).departmentId);
+        QVERIFY(departments.size() >= 2);
+        until(engine,engine.calendar().horizonEnd());
+        QVector<QDateTime> starts;
+        for (const auto &r:engine.calendar().history()) {
+            if (r.action != CalendarAction::Created || r.snapshot.data.recurrenceTemplateId != 1000) continue;
+            starts.append(r.snapshot.data.start);
+            QVERIFY(r.timestamp.secsTo(r.snapshot.data.start) >= 5*3600);
+        }
+        QCOMPARE(starts.size(),3);
+        for (int i=1;i<starts.size();++i) QCOMPARE(starts[i-1].daysTo(starts[i]),qint64(7));
+        QVERIFY(engine.participants().value(first.data.organizerId).skill >= 10);
+        QCOMPARE(engine.calendar().event(first.id)->status,EventStatus::Completed);
+    }
+    void seminarWeekendsAndConflictsAreHandled() {
+        auto config = setup(); config.startDate = QDate(2026,10,16); // Friday.
+        config.periodicSeminars = true; config.seminarPeriodDays = 1;
+        config.conflictPolicy = ConflictPolicy::Reject;
+        SimulationEngine engine(config);
+        EventData occupied; occupied.title="Hall reserved"; occupied.organizerId=1; occupied.participantIds={1};
+        occupied.start=modelDateTime(config.startDate.addDays(3),QTime(14,0)); occupied.end=occupied.start.addSecs(5400);
+        occupied.roomId=config.departmentCount+1;
+        QVERIFY(engine.createEvent(occupied,{1,UserRole::Secretary,{}}).ok());
+        until(engine,modelDateTime(config.startDate,QTime(9,0)));
+        QCOMPARE(engine.requests().last().requested.type,EventType::Seminar);
+        QCOMPARE(engine.requests().last().requested.start,occupied.start);
+        QCOMPARE(engine.requests().last().result.error,CalendarError::Conflict);
+        const int count = engine.requests().size(); engine.step(); QCOMPARE(engine.requests().size(),count);
+        until(engine,engine.calendar().horizonEnd());
+        QSet<QDate> days;
+        for (const auto &r:engine.requests()) if (r.requested.recurrenceTemplateId == 1000) {
+            QVERIFY(r.requested.start.date().dayOfWeek() <= 5);
+            QVERIFY(!days.contains(r.requested.start.date())); days.insert(r.requested.start.date());
+        }
+        QVERIFY(days.size()>1);
+    }
+    void weeklyMeetingUsesAppointedLeaders() {
+        auto config = setup(); config.initialMeetings = true;
+        SimulationEngine engine(config);
+        const UserContext actor{1,UserRole::Secretary,{}};
+        QVERIFY(engine.assignLeader(1,2,actor).ok());
+        QVERIFY(engine.transferEmployee(9,3,actor).ok()); // Department 2 has no leader now.
+        until(engine,modelDateTime(config.startDate,QTime(18,0)));
+        bool found=false;
+        for (const auto &event:engine.calendar().calendar().events) if(event.data.type==EventType::ManagementMeeting) {
+            found=true;
+            QVERIFY(event.data.participantIds.contains(2));
+            QVERIFY(!event.data.participantIds.contains(1));
+            QVERIFY(!event.data.participantIds.contains(9));
+            QVERIFY(!event.data.participantIds.contains(10)); // No substitute chosen from department 2.
+            QCOMPARE(event.data.participantIds.size(),config.departmentCount-1);
+        }
+        QVERIFY(found);
+        engine.reset(); QCOMPARE(engine.calendar().catalog().departments.value(1).leaderId,1);
+    }
+    void randomManagementMeetingUsesAppointedLeaders() {
+        auto config = setup(); config.participantsMin = config.departmentCount;
+        SimulationEngine engine(config);
+        QVERIFY(engine.assignLeader(1,2,{1,UserRole::Secretary,{}}).ok());
+        QVERIFY(engine.trigger(ScenarioKind::ManagementMeeting).ok());
+        const auto event = engine.calendar().calendar().events.first();
+        QVERIFY(event.data.participantIds.contains(2));
+        QVERIFY(!event.data.participantIds.contains(1));
+        for (int id : event.data.participantIds) {
+            const auto &catalog = engine.calendar().catalog();
+            QCOMPARE(catalog.departments.value(catalog.employees.value(id).departmentId).leaderId,id);
+        }
+    }
     void noFutureGenerationAndLivePreset() {
         auto config = setup(); config.initialMeetings = true;
         SimulationEngine engine(config);

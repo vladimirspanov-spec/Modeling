@@ -2,6 +2,7 @@
 #define WIDGET_H
 
 #include <QWidget>
+#include "src/services/calendarsetup.h"
 #include <QMap>
 
 QT_BEGIN_NAMESPACE
@@ -30,6 +31,8 @@ private:
                                const QString &label, double value);
     QComboBox *addChoice(QFormLayout *form, const QString &key, const QString &label,
                          const QStringList &labels, const QStringList &values, int index);
+    CalendarSetup currentSetup() const;
+    void applySetup(const CalendarSetup &setup);
     void resetDefaults();
     void updateSummary();
     QStringList validationErrors() const;
@@ -41,6 +44,7 @@ private:
     QDateEdit *startDate;
     QTimeEdit *workStart;
     QTimeEdit *workEnd;
+    QTimeEdit *seminarTime;
     QLineEdit *seed;
     QLabel *summary = nullptr;
     QLabel *status = nullptr;

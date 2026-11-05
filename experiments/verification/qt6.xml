@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Linux-c++"
+	tests="4"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname="suffering"
+	time="5"
+	timestamp="2026-11-04T13:14:01"
+	>
+	<testcase name="calendarservice" classname="calendarservice" time="0.00920583" status="run">
+		<properties/>
+		<system-out>********* Start testing of CalendarServiceTest *********
+Config: Using QtTest library 6.4.2, Qt 6.4.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 13.2.0), ubuntu 24.04
+PASS   : CalendarServiceTest::initTestCase()
+PASS   : CalendarServiceTest::createUpdateAndSnapshots()
+PASS   : CalendarServiceTest::conflictsAndAtomicUpdate()
+PASS   : CalendarServiceTest::validationAndPermissions()
+PASS   : CalendarServiceTest::lifecycleAndArchive()
+PASS   : CalendarServiceTest::filtersAndMultiday()
+PASS   : CalendarServiceTest::stepIndependenceAndHorizon()
+PASS   : CalendarServiceTest::cleanupTestCase()
+Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 3ms
+********* Finished testing of CalendarServiceTest *********
+</system-out>
+	</testcase>
+	<testcase name="simulationengine" classname="simulationengine" time="0.572426" status="run">
+		<properties/>
+		<system-out>********* Start testing of SimulationEngineTest *********
+Config: Using QtTest library 6.4.2, Qt 6.4.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 13.2.0), ubuntu 24.04
+PASS   : SimulationEngineTest::initTestCase()
+PASS   : SimulationEngineTest::noFutureGenerationAndLivePreset()
+PASS   : SimulationEngineTest::departmentMeetingsUseSeparateDays()
+PASS   : SimulationEngineTest::planNoticeBoundaryAndLifecycle()
+PASS   : SimulationEngineTest::generatedNoticeAndDiversity()
+PASS   : SimulationEngineTest::deterministicAcrossStepsAndReset()
+PASS   : SimulationEngineTest::dependencies()
+PASS   : SimulationEngineTest::stableReferencesAndUniqueTransfers()
+PASS   : SimulationEngineTest::absenceAndRoomClosureCancelFutureEvents()
+PASS   : SimulationEngineTest::catalogAndCompletionEffects()
+PASS   : SimulationEngineTest::cleanupTestCase()
+Totals: 11 passed, 0 failed, 0 skipped, 0 blacklisted, 568ms
+********* Finished testing of SimulationEngineTest *********
+</system-out>
+	</testcase>
+	<testcase name="completion" classname="completion" time="1.90261" status="run">
+		<properties/>
+		<system-out>********* Start testing of CompletionTest *********
+Config: Using QtTest library 6.4.2, Qt 6.4.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 13.2.0), ubuntu 24.04
+PASS   : CompletionTest::initTestCase()
+PASS   : CompletionTest::remindersRepeatWithoutDuplicates()
+PASS   : CompletionTest::importanceChangesAndCancellation()
+PASS   : CompletionTest::rescheduleReplacesReminderSchedule()
+PASS   : CompletionTest::rejectSuggestAndAutomatic()
+PASS   : CompletionTest::staleSuggestionAndNoSlot()
+PASS   : CompletionTest::reportClipsOccupancyAndSeparatesOutcomes()
+PASS   : CompletionTest::saveLoadContinuationAndCorruption()
+PASS   : CompletionTest::horizonAndFuturePlans()
+PASS   : CompletionTest::reproducibilityAcrossStepsAndReset()
+PASS   : CompletionTest::batchAggregationAndDeterminism()
+PASS   : CompletionTest::invalidConfigurationAndState()
+PASS   : CompletionTest::cleanupTestCase()
+Totals: 13 passed, 0 failed, 0 skipped, 0 blacklisted, 1898ms
+********* Finished testing of CompletionTest ********...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="calendarwindow" classname="calendarwindow" time="3.21806" status="run">
+		<properties/>
+		<system-out>********* Start testing of CalendarWindowTest *********
+Config: Using QtTest library 6.4.2, Qt 6.4.2 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 13.2.0), ubuntu 24.04
+PASS   : CalendarWindowTest::initTestCase()
+QWARN  : CalendarWindowTest::futureEventsAndRestoredStateAreVisible() This plugin does not support propagateSizeHints()
+PASS   : CalendarWindowTest::futureEventsAndRestoredStateAreVisible()
+QWARN  : CalendarWindowTest::newSettingsReachEngine() This plugin does not support propagateSizeHints()
+PASS   : CalendarWindowTest::newSettingsReachEngine()
+QWARN  : CalendarWindowTest::finishStopsTimerAndTransferUpdatesUi() This plugin does not support propagateSizeHints()
+QWARN  : CalendarWindowTest::finishStopsTimerAndTransferUpdatesUi() This plugin does not support propagateSizeHints()
+QWARN  : CalendarWindowTest::finishStopsTimerAndTransferUpdatesUi() This plugin does not support propagateSizeHints()
+PASS   : CalendarWindowTest::finishStopsTimerAndTransferUpdatesUi()
+QWARN  : CalendarWind...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+</testsuite>

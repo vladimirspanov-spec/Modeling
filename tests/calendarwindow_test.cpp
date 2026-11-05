@@ -1,12 +1,16 @@
 #include "simulationwindow.h"
 #include "officescene.h"
 #include "widget.h"
+#include "src/storage/simulationstore.h"
+#include "src/ui/runtools.h"
+#include <QPlainTextEdit>
 #include <QtTest>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QTableWidget>
 #include <QDateEdit>
 #include <QDateTimeEdit>
+#include <QTimeEdit>
 #include <QDialog>
 #include <QDir>
 #include <QLabel>
@@ -28,7 +32,7 @@ namespace {
 CalendarSetup setup(bool preset = false) {
     CalendarSetup value;
     value.startDate = QDate(2026, 10, 12);
-    value.initialMeetings = preset;
+    value.initialMeetings = preset; value.periodicSeminars = false;
     value.requestRatePerWorkday = 0;
     value.changeRatePerWorkday = 0;
     return value;
@@ -55,6 +59,123 @@ void fillEvent(QDialog *dialog, const QString &title, QTime start, QTime end) {
 class CalendarWindowTest : public QObject {
     Q_OBJECT
 private slots:
+    void dailyHourFilterAndLeaderAppointmentAreUsable() {
+        auto config=setup(); SimulationEngine engine(config);
+        EventData event; event.title="Overnight"; event.start=modelDateTime(config.startDate,QTime(20,0));
+        event.end=modelDateTime(config.startDate.addDays(1),QTime(10,0)); event.participantIds={1}; event.organizerId=1;
+        QVERIFY(engine.createEvent(event,{1,UserRole::Secretary,{}}).ok());
+        SimulationWindow window(config); window.restoreState(std::move(engine)); window.show();
+        auto *enabled=window.findChild<QCheckBox *>("filterHours");
+        auto *from=window.findChild<QTimeEdit *>("filterHourFrom"); auto *to=window.findChild<QTimeEdit *>("filterHourTo");
+        QVERIFY(enabled); QVERIFY(from); QVERIFY(to); QVERIFY(!from->isEnabled());
+        QCOMPARE(window.findChildren<QPushButton *>("calendarEvent").size(),2);
+        from->setTime(QTime(9,0)); to->setTime(QTime(11,0)); enabled->setChecked(true);
+        QCOMPARE(window.findChildren<QPushButton *>("calendarEvent").size(),1);
+        from->setTime(QTime(10,0)); QCOMPARE(window.findChildren<QPushButton *>("calendarEvent").size(),0);
+        from->setTime(QTime(12,0));
+        QVERIFY(window.findChild<QLabel *>("calendarSummary")->text().contains(QString::fromUtf8("Некорректный фильтр")));
+        enabled->setChecked(false); QCOMPARE(window.findChildren<QPushButton *>("calendarEvent").size(),2);
+        auto *departments=window.findChild<QTableWidget *>("organizationsTable");
+        departments->selectRow(0);
+        inDialog([](QDialog *dialog) {
+            auto *employees=dialog->findChild<QComboBox *>("leaderEmployee"); QVERIFY(employees);
+            employees->setCurrentIndex(employees->findData(2)); dialog->accept();
+        });
+        window.findChild<QPushButton *>("assignLeader")->click();
+        QCOMPARE(window.calendarService().catalog().departments.value(1).leaderId,2);
+        QCOMPARE(departments->item(0,3)->text(),QString("1_02"));
+        QVERIFY(window.findChild<QTableWidget *>("participantsTable")->item(1,3)->text().contains(QString::fromUtf8("Руководитель")));
+        window.findChild<QPushButton *>("resetSimulation")->click();
+        QCOMPARE(departments->item(0,3)->text(),QString("1_01")); QVERIFY(!enabled->isChecked());
+    }
+    void groupedMailCanBeOpenedAndKeepsRepeatsSeparate() {
+        auto config = setup(); config.reminders[0] = {1,1};
+        SimulationEngine engine(config);
+        EventData event;
+        event.title = "<b>Original meeting %2</b>";
+        event.start = modelDateTime(config.startDate, QTime(10,0)); event.end = event.start.addSecs(3600);
+        event.organizerId = 1; event.participantIds = {1,2}; event.importance = Importance::Low;
+        QVERIFY(engine.createEvent(event, {1,UserRole::Secretary,{}}).ok());
+        event.organizerId = 3; event.participantIds = {3};
+        QVERIFY(engine.createEvent(event, {1,UserRole::Secretary,{}}).ok());
+        QVERIFY(engine.step().ok());
+        int pauses = 0;
+        RunTools view(engine, [&] { ++pauses; }, [] {}, [](EventId) {});
+        view.refresh(); view.show();
+        view.findChild<QTabWidget *>()->setCurrentIndex(1);
+        auto *mail = view.findChild<QTableWidget *>("emailsTable");
+        auto *open = view.findChild<QPushButton *>("openEmail");
+        QVERIFY(mail); QVERIFY(open);
+        QCOMPARE(engine.emails().size(), 3); QCOMPARE(mail->rowCount(), 2);
+        QVERIFY(!open->isEnabled());
+        QCOMPARE(mail->item(0,3)->text(), QString("employee1@work (+1)"));
+        QVERIFY(mail->item(0,3)->toolTip().contains("employee2@work"));
+        QCOMPARE(mail->item(1,3)->text(), QString("employee3@work"));
+        mail->selectRow(0); QVERIFY(open->isEnabled());
+        inDialog([&](QDialog *dialog) {
+            auto *message = dialog->findChild<QPlainTextEdit *>("emailMessageText"); QVERIFY(message);
+            QVERIFY(message->isReadOnly()); QCOMPARE(pauses, 1);
+            const auto text = message->toPlainText();
+            QVERIFY(text.contains("employee1@work, employee2@work"));
+            QVERIFY(!text.contains("employee3@work"));
+            QVERIFY(text.contains("<b>Original meeting %2</b>")); // Preserve literal HTML and percent signs.
+            QVERIFY(text.contains("12.10.2026 10:00"));
+            dialog->accept();
+        });
+        open->click();
+        QCOMPARE(pauses, 1);
+        QVERIFY(engine.step().ok()); view.refresh();
+        QCOMPARE(engine.emails().size(), 6); QCOMPARE(mail->rowCount(), 4);
+        QCOMPARE(mail->currentRow(), 0); QVERIFY(open->isEnabled());
+        inDialog([&](QDialog *dialog) {
+            auto *message = dialog->findChild<QPlainTextEdit *>("emailMessageText"); QVERIFY(message);
+            QVERIFY(message->toPlainText().contains("employee3@work"));
+            QVERIFY(!message->toPlainText().contains("employee1@work"));
+            dialog->accept();
+        });
+        QVERIFY(QMetaObject::invokeMethod(mail, "cellDoubleClicked", Qt::DirectConnection, Q_ARG(int, 1), Q_ARG(int, 0)));
+        QCOMPARE(pauses, 2);
+        engine.reset(); view.refresh(); QCOMPARE(mail->rowCount(), 0); QVERIFY(!open->isEnabled());
+    }
+    void futureEventsAndRestoredStateAreVisible() {
+        auto config = setup(); SimulationEngine engine(config);
+        EventData event;
+        event.title = "Beyond horizon"; event.start = modelDateTime(config.startDate.addDays(40),QTime(10,0));
+        event.end = event.start.addSecs(3600); event.organizerId = 1; event.participantIds = {1};
+        QVERIFY(engine.createEvent(event,{1,UserRole::Secretary,{}}).ok());
+        auto saved = SimulationStore::snapshot(engine);
+        auto restored = SimulationStore::restore(saved);
+        SimulationWindow window(config); window.restoreState(std::move(*restored)); window.show();
+        auto *events = window.findChild<QTableWidget *>("allEventsTable"); QVERIFY(events); QCOMPARE(events->rowCount(),1);
+        QVERIFY(events->item(0,1)->text().contains(config.startDate.addDays(40).toString("dd.MM.yyyy")));
+        QCOMPARE(window.findChild<QTableWidget *>("participantsTable")->columnCount(),4);
+        QCOMPARE(window.findChild<QTableWidget *>("organizationsTable")->columnCount(),4);
+        auto *from = window.findChild<QDateEdit *>("filterFrom"), *to = window.findChild<QDateEdit *>("filterTo");
+        to->setDate(config.startDate.addDays(40)); from->setDate(config.startDate.addDays(40));
+        QCOMPARE(window.findChildren<QPushButton *>("calendarEvent").size(),1);
+    }
+    void newSettingsReachEngine() {
+        Widget parameters;
+        parameters.findChild<QSpinBox *>("seminarPeriodDays")->setValue(3);
+        parameters.findChild<QSpinBox *>("seminarLeadDays")->setValue(1);
+        parameters.findChild<QSpinBox *>("seminarDurationMinutes")->setValue(60);
+        parameters.findChild<QTimeEdit *>("seminarTime")->setTime(QTime(15,0));
+        parameters.findChild<QSpinBox *>("reminderLowLeadDays")->setValue(7);
+        parameters.findChild<QSpinBox *>("reminderHighPeriodHours")->setValue(3);
+        parameters.findChild<QComboBox *>("conflictPolicy")->setCurrentIndex(2);
+        parameters.findChild<QSpinBox *>("rescheduleWindowWorkdays")->setValue(8);
+        parameters.findChild<QSpinBox *>("repetitions")->setValue(4);
+        for (auto *button : parameters.findChildren<QPushButton *>())
+            if (button->text() == QString::fromUtf8("Открыть моделирование")) button->click();
+        SimulationWindow *window = nullptr;
+        for (auto *child : parameters.children()) if (auto *w = dynamic_cast<SimulationWindow *>(child)) window = w;
+        QVERIFY(window);
+        const auto &s = window->simulationEngine().setup();
+        QVERIFY(s.periodicSeminars); QCOMPARE(s.seminarPeriodDays,3); QCOMPARE(s.seminarLeadDays,1);
+        QCOMPARE(s.seminarTime,QTime(15,0)); QCOMPARE(s.seminarDurationMinutes,60);
+        QCOMPARE(s.reminders[0].leadDays,7); QCOMPARE(s.reminders[2].periodHours,3);
+        QCOMPARE(s.conflictPolicy,ConflictPolicy::AutoReschedule); QCOMPARE(s.rescheduleWindowWorkdays,8); QCOMPARE(s.repetitions,4);
+    }
     void finishStopsTimerAndTransferUpdatesUi() {
         auto config = setup(); config.stepMinutes = 60;
         SimulationWindow window(config);

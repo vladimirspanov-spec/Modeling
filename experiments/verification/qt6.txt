@@ -1,0 +1,14 @@
+Internal ctest changing into directory: /home/hren228/Modeling/build/qt6
+Test project /home/hren228/Modeling/build/qt6
+    Start 1: calendarservice
+1/4 Test #1: calendarservice ..................   Passed    0.01 sec
+    Start 2: simulationengine
+2/4 Test #2: simulationengine .................   Passed    0.57 sec
+    Start 3: completion
+3/4 Test #3: completion .......................   Passed    1.90 sec
+    Start 4: calendarwindow
+4/4 Test #4: calendarwindow ...................   Passed    3.22 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =   5.70 sec

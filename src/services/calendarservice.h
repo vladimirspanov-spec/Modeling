@@ -8,6 +8,7 @@ public:
     // Invalid catalog/time configuration is a programming error (invalid_argument).
     CalendarService(CompanyCatalog catalog, QDateTime start, QDateTime horizonEnd);
 
+    CalendarResult checkEvent(const EventData &data, const UserContext &actor, EventId id = 0) const;
     CalendarResult createEvent(const EventData &data, const UserContext &actor);
     CalendarResult updateEvent(EventId id, const EventData &data, const UserContext &actor);
     CalendarResult cancelEvent(EventId id, const UserContext &actor);
@@ -20,6 +21,7 @@ public:
     QString participantCode(int id) const;
     std::optional<int> participantKey(const QString &code) const;
     CalendarResult transferEmployee(int id, int department, const UserContext &actor);
+    CalendarResult assignLeader(int department, int employee, const UserContext &actor);
     CalendarResult setEmployeeAvailable(int id, bool available, const UserContext &actor);
     CalendarResult setRoomAvailable(int id, bool available, const UserContext &actor);
     bool roomAvailable(int id) const { return catalog_.rooms.contains(id) && !unavailableRooms_.contains(id); }
