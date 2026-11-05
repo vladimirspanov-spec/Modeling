@@ -1,8 +1,8 @@
-#include "src/reporting/simulationreport.h"
-#include "simulationwindow.h"
-#include "officescene.h"
-#include "widget.h"
-#include "src/storage/simulationstore.h"
+#include "src/core/simulationreport.h"
+#include "src/ui/simulationwindow.h"
+#include "src/ui/officescene.h"
+#include "src/ui/widget.h"
+#include "src/core/simulationstore.h"
 #include "src/ui/runtools.h"
 #include <QPlainTextEdit>
 #include <QtTest>
@@ -145,7 +145,7 @@ private slots:
         auto *events = window.findChild<QTableWidget *>("allEventsTable"); QVERIFY(events); QCOMPARE(events->rowCount(),1);
         QVERIFY(events->item(0,1)->text().contains(config.startDate.addDays(40).toString("dd.MM.yyyy")));
         QCOMPARE(window.findChild<QTableWidget *>("participantsTable")->columnCount(),4);
-        QCOMPARE(window.findChild<QTableWidget *>("organizationsTable")->columnCount(),4);
+        QCOMPARE(window.findChild<QTableWidget *>("organizationsTable")->columnCount(),3);
         auto *from = window.findChild<QDateEdit *>("filterFrom"), *to = window.findChild<QDateEdit *>("filterTo");
         to->setDate(config.startDate.addDays(40)); from->setDate(config.startDate.addDays(40));
         QCOMPARE(window.findChildren<QPushButton *>("calendarEvent").size(),1);
@@ -524,51 +524,6 @@ private slots:
         QCOMPARE(zones.value(1), QString("work"));
         QCOMPARE(zones.value(config.employeesPerDepartment + 1), QString("work"));
         QCOMPARE(zones.size(), calendar.catalog().employees.size());
-    }
-    void officeSicknessTripsRecoveryAndRoomRepair() {
-        auto config = setup();
-        CalendarService calendar(makeCompanyCatalog(config), modelDateTime(config.startDate), modelDateTime(config.startDate.addDays(config.dayCount)));
-        QGraphicsScene scene;
-        const UserContext secretary{1, UserRole::Secretary, {}};
-        auto locations = [&] {
-            populateOfficeScene(scene, calendar);
-            QMap<int, int> result;
-            for (auto *item : scene.items()) {
-                if (item->data(2).toString() != "employee") continue;
-                const int id = item->data(0).toInt();
-                if (result.contains(id)) return QMap<int, int>{};
-                result.insert(id, item->data(1).toInt());
-            }
-            return result;
-        };
-        QCOMPARE(locations().size(), calendar.catalog().employees.size());
-        QVERIFY(calendar.setEmployeeAvailable(2, false, secretary).ok());
-        QCOMPARE(locations().value(2), OfficeLocation::Sick);
-        bool hasSickMarker = false;
-        for (auto *item : scene.items())
-            if (item->data(2).toString() == "employee" && item->data(0).toInt() == 2)
-                hasSickMarker = item->toolTip().contains(QString::fromUtf8("Болеет"));
-        QVERIFY(hasSickMarker);
-        EventData trip;
-        trip.title = "Business trip"; trip.type = EventType::BusinessTrip;
-        trip.start = modelDateTime(config.startDate, QTime(9, 0)); trip.end = trip.start.addSecs(3600);
-        trip.participantIds = {1}; trip.organizerId = 1;
-        QVERIFY(calendar.createEvent(trip, secretary).ok());
-        QCOMPARE(locations().value(1), 1); // A future trip does not move its participant.
-        QVERIFY(calendar.advanceTo(trip.start).ok());
-        QCOMPARE(locations().value(1), OfficeLocation::Outside);
-        QCOMPARE(locations().value(2), OfficeLocation::Sick);
-        QVERIFY(calendar.advanceTo(trip.end).ok());
-        QCOMPARE(locations().value(1), 1);
-        QVERIFY(calendar.setEmployeeAvailable(2, true, secretary).ok());
-        QCOMPARE(locations().value(2), 1);
-        QVERIFY(calendar.setRoomAvailable(1, false, secretary).ok());
-        QCOMPARE(locations().value(1), OfficeLocation::Corridor);
-        QVERIFY(calendar.setRoomAvailable(1, true, secretary).ok());
-        QCOMPARE(locations().value(1), 1);
-        QVERIFY(calendar.transferEmployee(1, 2, secretary).ok());
-        QCOMPARE(locations().value(1), 2);
-        QCOMPARE(locations().size(), calendar.catalog().employees.size());
     }
     void stepStartsCompletesAndArchives() {
         SimulationWindow window(setup());

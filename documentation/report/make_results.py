@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent
-DATA = ROOT / 'experiments/results/comparison.json'
+DATA = ROOT / 'documentation/experiments/results/comparison.json'
 data = json.loads(DATA.read_text())
 assert data['complete'], 'Report requires a completed experiment'
 runs = data['runs']

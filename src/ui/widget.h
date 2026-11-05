@@ -2,7 +2,7 @@
 #define WIDGET_H
 
 #include <QWidget>
-#include "src/services/calendarsetup.h"
+#include "src/core/calendarsetup.h"
 #include <QMap>
 
 QT_BEGIN_NAMESPACE

@@ -1,5 +1,5 @@
 #pragma once
-#include "src/experiments/experimentrunner.h"
+#include "src/core/experimentrunner.h"
 #include <QDialog>
 
 class ExperimentDialog : public QDialog {

@@ -1,7 +1,7 @@
 #ifndef SIMULATIONWINDOW_H
 #define SIMULATIONWINDOW_H
 
-#include "src/simulation/simulationengine.h"
+#include "src/core/simulationengine.h"
 #include <QWidget>
 
 class QLabel;

@@ -1,5 +1,5 @@
 #include "simulationreport.h"
-#include "src/storage/jsoncodec.h"
+#include "src/core/jsoncodec.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <algorithm>
@@ -82,7 +82,7 @@ QJsonObject SimulationReport::metrics(const SimulationEngine &engine)
 
 QJsonObject SimulationReport::create(const SimulationEngine &engine)
 {
-    QJsonArray events, history, requests, emails, log, employees, participantStates, departmentStates, departments;
+    QJsonArray events, history, requests, emails, log, employees, departments;
     CalendarFilter all; all.scope = CalendarScope::All;
     for (const auto &e : engine.calendar().calendar(all).events) events.append(eventSnapshot(e));
     for (const auto &record : engine.calendar().history()) history.append(QJsonObject{{"sequence", QString::number(record.sequence)},
@@ -101,18 +101,14 @@ QJsonObject SimulationReport::create(const SimulationEngine &engine)
         {"sentAt", e.sentAt.toString(Qt::ISODate)}, {"deliveredAt", e.deliveredAt.toString(Qt::ISODate)}, {"status", "Delivered (simulated)"}});
     for (const auto &e : engine.log()) log.append(QJsonObject{{"time", e.time.toString(Qt::ISODate)}, {"description", e.description},
         {"eventId", e.eventId ? QString::number(*e.eventId) : QString()}});
-    for (const auto &e : engine.calendar().catalog().employees) employees.append(QJsonObject{{"id", e.id}, {"publicId", e.publicId}, {"departmentId", e.departmentId}, {"available", e.available}});
-    for (auto it = engine.participants().cbegin(); it != engine.participants().cend(); ++it) participantStates.append(QJsonObject{{"id", it.key()},
-        {"stress", it->stress}, {"skill", it->skill}, {"sickSince", it->sickSince ? it->sickSince->toString(Qt::ISODate) : QString()}});
-    for (auto it = engine.organizations().cbegin(); it != engine.organizations().cend(); ++it) departmentStates.append(QJsonObject{{"id", it.key()},
-        {"workload", it->workload}, {"reputation", it->reputation}, {"overloaded", it->overloaded}, {"conflictSince", it->conflictSince ? it->conflictSince->toString(Qt::ISODate) : QString()}});
+    for (const auto &e : engine.calendar().catalog().employees) employees.append(QJsonObject{{"id", e.id}, {"publicId", e.publicId}, {"departmentId", e.departmentId}});
     for (const auto &department : engine.calendar().catalog().departments)
         departments.append(QJsonObject{{"id", department.id}, {"name", department.name}, {"leaderId", department.leaderId},
             {"leaderCode", engine.calendar().participantCode(department.leaderId)}});
     return {{"schemaVersion", 1}, {"generator", engine.modelVersion()}, {"configuration", JsonCodec::setup(engine.setup())},
         {"modelTime", engine.calendar().modelTime().toString(Qt::ISODate)}, {"finished", engine.finished()}, {"metrics", metrics(engine)},
         {"events", events}, {"history", history}, {"requests", requests}, {"emails", emails}, {"log", log}, {"employees", employees},
-        {"participantStates", participantStates}, {"departmentStates", departmentStates}, {"departments", departments}};
+        {"departments", departments}};
 }
 
 QByteArray SimulationReport::csv(const QJsonObject &report)

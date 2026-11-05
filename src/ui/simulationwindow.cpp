@@ -1,6 +1,6 @@
-#include "simulationwindow.h"
+#include "src/ui/simulationwindow.h"
 #include "src/ui/runtools.h"
-#include "officescene.h"
+#include "src/ui/officescene.h"
 
 #include <QComboBox>
 #include <QCheckBox>
@@ -229,7 +229,7 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
 
     auto *officePage = new QWidget(this);
     auto *officeLayout = new QVBoxLayout(officePage);
-    auto *officeHelp = new QLabel(tr("План офиса · Сотрудники работают в своих отделах, уходят на встречи и в командировки. Заболевшие показаны отдельно."), officePage);
+    auto *officeHelp = new QLabel(tr("План офиса · Сотрудники работают в своих отделах, уходят на встречи и в командировки."), officePage);
     officeHelp->setWordWrap(true);
     officeLayout->addWidget(officeHelp);
     officeScene_ = new QGraphicsScene(officePage);
@@ -276,7 +276,7 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
     tabs_->addTab(peoplePage, tr("Участники"));
     auto *departmentPage = new QWidget(this);
     auto *departmentLayout = new QVBoxLayout(departmentPage);
-    organizations_ = table({tr("Отдел"), tr("Участников"), tr("Состояние"), tr("Руководитель")}, "organizationsTable");
+    organizations_ = table({tr("Отдел"), tr("Участников"), tr("Руководитель")}, "organizationsTable");
     departmentLayout->addWidget(organizations_);
     tabs_->addTab(departmentPage, tr("Отделы"));
     auto *catalog = table({tr("Событие"), tr("Относительный вес"), tr("Базовая длительность")}, "eventCatalog");
@@ -286,7 +286,7 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
         catalog->setItem(row, 1, new QTableWidgetItem(definition.weight ? QString::number(definition.weight) : tr("Частота изменений")));
         catalog->setItem(row, 2, new QTableWidgetItem(definition.durationMinutes ? tr("%1 мин").arg(definition.durationMinutes) : tr("Изменение состояния")));
     }
-    catalog->setToolTip(tr("Вероятности пропорциональны весам доступных событий. Восстановление возможно только после происшествия."));
+    catalog->setToolTip(tr("Вероятности пропорциональны весам типов календарных мероприятий."));
     tabs_->addTab(catalog, tr("Типы событий"));
 
     runTools_ = new RunTools(engine_, [this] { pause(); }, [this] { refreshCalendar(); }, [this] { return userContext(); },
@@ -505,7 +505,7 @@ void SimulationWindow::showEvent(std::optional<EventId> id, std::optional<EventD
     organizer->setObjectName("eventOrganizer");
     EventData initial;
     initial.title = tr("Новое событие");
-    initial.start = engine_.calendar().modelTime().addSecs(5 * 3600);
+    initial.start = engine_.calendar().modelTime().addSecs(30 * 60);
     initial.end = initial.start.addSecs(3600);
     initial.organizerId = 1; initial.participantIds = {1};
     if (existing) initial = existing->data;
@@ -531,7 +531,7 @@ void SimulationWindow::showEvent(std::optional<EventId> id, std::optional<EventD
     form->addRow(tr("Участники"), participants);
     form->addRow(tr("Важность"), importance);
     form->addRow(tr("ID организатора"), organizer);
-    auto *help = new QLabel(tr("ID: отдел_номер, например 1_01. Актуальные ID указаны на вкладке «Участники». При переводе ID меняется автоматически."), &dialog);
+    auto *help = new QLabel(tr("ID: отдел_номер, например 1_01. Актуальные ID указаны на вкладке «Участники»."), &dialog);
     help->setWordWrap(true);
     form->addRow(help);
     const auto permission = existing ? engine_.calendar().checkEvent(initial, userContext(), *id) : CalendarResult{};
@@ -627,7 +627,7 @@ void SimulationWindow::refreshJournalAndState()
         participants_->item(row, 0)->setData(Qt::UserRole, person.id);
         put(participants_, row, 1, person.name);
         put(participants_, row, 2, catalog.departments.value(person.departmentId).name);
-        put(participants_, row, 3, !person.available ? tr("Болеет") : engine_.calendar().employeeBusy(person.id) ? tr("На мероприятии") : tr("Доступен"));
+        put(participants_, row, 3, engine_.calendar().employeeBusy(person.id) ? tr("На мероприятии") : tr("Доступен"));
         if (catalog.departments.value(person.departmentId).leaderId == person.id)
             participants_->item(row, 3)->setText(participants_->item(row, 3)->text() + tr(" · Руководитель"));
         ++row;
@@ -635,16 +635,10 @@ void SimulationWindow::refreshJournalAndState()
     organizations_->setRowCount(catalog.departments.size());
     row = 0;
     for (const auto &department : catalog.departments) {
-        const auto state = engine_.organizations().value(department.id);
         put(organizations_, row, 0, department.name);
         organizations_->item(row, 0)->setData(Qt::UserRole, department.id);
         put(organizations_, row, 1, QString::number(counts.value(department.id)));
-        QStringList states;
-        if (state.conflictSince) states.append(tr("Конфликт"));
-        if (state.overloaded) states.append(tr("Повышенная нагрузка"));
-        if (!engine_.calendar().roomAvailable(department.id)) states.append(tr("Помещение на ремонте"));
-        put(organizations_, row, 2, states.isEmpty() ? tr("Штатная работа") : states.join(" · "));
-        put(organizations_, row, 3, department.leaderId ? engine_.calendar().participantCode(department.leaderId) : tr("Не назначен"));
+        put(organizations_, row, 2, department.leaderId ? engine_.calendar().participantCode(department.leaderId) : tr("Не назначен"));
         ++row;
     }
     actorLabel_->setText(tr("Пользователь %1 · %2 · Seed %3 · Изменения календаря выполняются на паузе.")
@@ -658,9 +652,9 @@ void SimulationWindow::refreshOffice()
     const auto &calendar = engine_.calendar();
     QString signature = QStringLiteral("office:");
     for (const auto &room : calendar.catalog().rooms)
-        signature += QStringLiteral("r%1:%2;").arg(room.id).arg(calendar.roomAvailable(room.id));
+        signature += QStringLiteral("r%1;").arg(room.id);
     for (const auto &person : calendar.catalog().employees)
-        signature += QStringLiteral("p%1:%2:%3:%4;").arg(person.id).arg(person.departmentId).arg(person.publicId).arg(person.available);
+        signature += QStringLiteral("p%1:%2:%3;").arg(person.id).arg(person.departmentId).arg(person.publicId);
     CalendarFilter filter; filter.status = EventStatus::InProgress;
     for (const auto &event : calendar.calendar(filter).events)
         signature += QStringLiteral("e%1:%2;").arg(event.id).arg(event.version);

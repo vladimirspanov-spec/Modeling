@@ -32,9 +32,10 @@ CalendarService::CalendarService(CompanyCatalog catalog, QDateTime start, QDateT
             catalog_.employees.value(department.leaderId).departmentId != department.id))
             throw std::invalid_argument("Department leader must belong to the department");
     QSet<QString> codes;
+    QMap<int, int> nextParticipantNumber;
     const QRegularExpression format(QStringLiteral("^([1-9][0-9]*)_([0-9]{2,})$"));
     for (auto &employee : catalog_.employees) {
-        int &next = nextParticipantNumber_[employee.departmentId];
+        int &next = nextParticipantNumber[employee.departmentId];
         if (employee.publicId.isEmpty())
             employee.publicId = QStringLiteral("%1_%2").arg(employee.departmentId).arg(++next, 2, 10, QChar('0'));
         const auto match = format.match(employee.publicId);
@@ -87,13 +88,9 @@ CalendarResult CalendarService::validate(const EventData &data, EventId ignoredI
         if (!catalog_.employees.contains(id) || participants.contains(id))
             return failure(CalendarError::InvalidData, QStringLiteral("Участники должны существовать и не повторяться."));
         participants.insert(id);
-        if (!catalog_.employees.value(id).available)
-            return failure(CalendarError::InvalidState, QStringLiteral("Участник %1 временно недоступен.").arg(participantCode(id)));
     }
     if (data.roomId && !catalog_.rooms.contains(*data.roomId))
         return failure(CalendarError::InvalidData, QStringLiteral("Помещение не найдено."));
-    if (data.roomId && !roomAvailable(*data.roomId))
-        return failure(CalendarError::InvalidState, QStringLiteral("Помещение временно закрыто на ремонт."));
     if (data.type == EventType::BusinessTrip && data.roomId)
         return failure(CalendarError::InvalidData, QStringLiteral("Для командировки помещение не указывается."));
     CalendarResult result;
@@ -315,76 +312,6 @@ bool CalendarService::employeeBusy(int id) const
     for (const auto &event : active_)
         if (event.status == EventStatus::InProgress && event.data.participantIds.contains(id)) return true;
     return false;
-}
-
-CalendarResult CalendarService::transferEmployee(int id, int department, const UserContext &actor)
-{
-    if (!validActor(actor) || actor.role != UserRole::Secretary)
-        return failure(CalendarError::PermissionDenied, QStringLiteral("Перевод доступен секретарю."));
-    if (!catalog_.employees.contains(id) || !catalog_.departments.contains(department))
-        return failure(CalendarError::InvalidData, QStringLiteral("Участник или отдел не найдены."));
-    if (time_ >= horizonEnd_ || employeeBusy(id) || catalog_.employees.value(id).departmentId == department)
-        return failure(CalendarError::InvalidState, QStringLiteral("Перевод сейчас невозможен."));
-    auto &employee = catalog_.employees[id];
-    if (catalog_.departments[employee.departmentId].leaderId == id)
-        catalog_.departments[employee.departmentId].leaderId = 0;
-    employee.departmentId = department;
-    employee.publicId = QStringLiteral("%1_%2").arg(department).arg(++nextParticipantNumber_[department], 2, 10, QChar('0'));
-    for (auto &event : active_) {
-        if (event.data.participantIds.contains(id) || event.data.organizerId == id) {
-            captureParticipants(event);
-            ++event.version;
-            record(event, CalendarAction::Updated, time_, actor.employeeId);
-        }
-    }
-    return {};
-}
-
-CalendarResult CalendarService::assignLeader(int department, int employee, const UserContext &actor)
-{
-    if (!validActor(actor) || actor.role != UserRole::Secretary)
-        return failure(CalendarError::PermissionDenied, QStringLiteral("Назначение руководителя доступно секретарю."));
-    if (!catalog_.departments.contains(department) || !catalog_.employees.contains(employee) ||
-        catalog_.employees.value(employee).departmentId != department)
-        return failure(CalendarError::InvalidData, QStringLiteral("Выберите сотрудника этого отдела."));
-    if (time_ >= horizonEnd_)
-        return failure(CalendarError::InvalidState, QStringLiteral("Прогон завершен."));
-    catalog_.departments[department].leaderId = employee;
-    return {};
-}
-
-CalendarResult CalendarService::setEmployeeAvailable(int id, bool available, const UserContext &actor)
-{
-    if (!validActor(actor) || actor.role != UserRole::Secretary)
-        return failure(CalendarError::PermissionDenied, QStringLiteral("Изменение доступности требует роли секретаря."));
-    if (!catalog_.employees.contains(id)) return failure(CalendarError::NotFound, QStringLiteral("Участник не найден."));
-    if (time_ >= horizonEnd_ || (!available && employeeBusy(id)))
-        return failure(CalendarError::InvalidState, QStringLiteral("Участник уже участвует в событии или прогон завершен."));
-    catalog_.employees[id].available = available;
-    if (!available) {
-        const auto events = active_.values();
-        for (const auto &event : events)
-            if (event.data.participantIds.contains(id)) cancelEvent(event.id, actor);
-    }
-    return {};
-}
-
-CalendarResult CalendarService::setRoomAvailable(int id, bool available, const UserContext &actor)
-{
-    if (!validActor(actor) || actor.role != UserRole::Secretary)
-        return failure(CalendarError::PermissionDenied, QStringLiteral("Изменение помещения требует роли секретаря."));
-    if (!catalog_.rooms.contains(id)) return failure(CalendarError::NotFound, QStringLiteral("Помещение не найдено."));
-    if (time_ >= horizonEnd_) return failure(CalendarError::InvalidState, QStringLiteral("Прогон завершен."));
-    for (const auto &event : active_)
-        if (!available && event.data.roomId == id && event.status == EventStatus::InProgress)
-            return failure(CalendarError::InvalidState, QStringLiteral("Помещение занято."));
-    if (available) unavailableRooms_.remove(id); else unavailableRooms_.insert(id);
-    if (!available) {
-        const auto events = active_.values();
-        for (const auto &event : events)
-            if (event.data.roomId == id) cancelEvent(event.id, actor);
-    }
-    return {};
 }
 
 QVector<CalendarRecord> CalendarService::historySince(int offset) const

@@ -1,5 +1,5 @@
 #include "experimentdialog.h"
-#include "src/storage/jsoncodec.h"
+#include "src/core/jsoncodec.h"
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QPushButton>

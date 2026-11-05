@@ -1,6 +1,6 @@
-#include "widget.h"
-#include "simulationwindow.h"
-#include "src/storage/simulationstore.h"
+#include "src/ui/widget.h"
+#include "src/ui/simulationwindow.h"
+#include "src/core/simulationstore.h"
 #include "src/ui/experimentdialog.h"
 #include <QFileDialog>
 
@@ -85,7 +85,7 @@ Widget::Widget(QWidget *parent) : QWidget(parent)
     addDecimal(scenario, "changeRatePerWorkday", tr("Изменений за рабочий день, на фирму"), 1);
     addInteger(scenario, "leadTimeMinWorkdays", tr("Дальний срок: минимум рабочих дней"), 0, 365, 1);
     addInteger(scenario, "leadTimeMaxWorkdays", tr("Дальний срок: максимум рабочих дней"), 0, 365, 5);
-    auto *duration = new QLabel(tr("19 типов событий: встречи, поручения, кадровые изменения и происшествия. Длительность зависит от типа события и состояния участников."), this);
+    auto *duration = new QLabel(tr("Планерки, совещания руководителей, семинары, командировки и другие встречи. Длительность задаётся типом мероприятия."), this);
     duration->setWordWrap(true);
     scenario->addRow(duration);
     addInteger(scenario, "participantsMin", tr("Минимум участников"), 1, 9000, 2);

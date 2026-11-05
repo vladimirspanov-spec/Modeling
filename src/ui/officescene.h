@@ -1,5 +1,5 @@
 #pragma once
-#include "src/services/calendarservice.h"
+#include "src/core/calendarservice.h"
 #include <QObject>
 class QGraphicsScene;
 
@@ -9,7 +9,6 @@ class QGraphicsScene;
 // Employee roles 4 and 5 hold the aisle point and corridor connection (scene centers).
 namespace OfficeLocation {
 constexpr int Outside = -1;
-constexpr int Sick = -2;
 constexpr int Corridor = -3;
 }
 

@@ -1,8 +1,8 @@
-#include "src/simulation/simulationengine.h"
-#include "src/storage/simulationstore.h"
-#include "src/storage/jsoncodec.h"
-#include "src/reporting/simulationreport.h"
-#include "src/experiments/experimentrunner.h"
+#include "src/core/simulationengine.h"
+#include "src/core/simulationstore.h"
+#include "src/core/jsoncodec.h"
+#include "src/core/simulationreport.h"
+#include "src/core/experimentrunner.h"
 #include <QtTest>
 #include <QTemporaryDir>
 
@@ -22,19 +22,18 @@ void until(SimulationEngine &e, QDateTime time) { while (!e.finished() && e.cale
 class CompletionTest : public QObject {
     Q_OBJECT
 private slots:
-    void seminarsAndAppointmentsSurviveSaveAndContinue() {
+    void seminarsSurviveSaveAndContinue() {
         auto s=config(); s.periodicSeminars=true; s.dayCount=21;
         s.seminarPeriodDays=3; s.seminarLeadDays=1; s.seminarTime=QTime(15,0); s.seminarDurationMinutes=60;
         SimulationEngine e(s);
-        QVERIFY(e.assignLeader(1,2,actor()).ok());
         until(e,modelDateTime(s.startDate.addDays(4)));
         auto restored=SimulationStore::restore(SimulationStore::snapshot(e));
-        QCOMPARE(restored->calendar().catalog().departments.value(1).leaderId,2);
+        QCOMPARE(restored->calendar().catalog().departments.value(1).leaderId,1);
         QCOMPARE(JsonCodec::setup(restored->setup()),JsonCodec::setup(s));
         until(e,e.calendar().horizonEnd()); until(*restored,restored->calendar().horizonEnd());
         QCOMPARE(SimulationReport::create(e),SimulationReport::create(*restored));
         auto hourly=s; hourly.stepMinutes=60;
-        SimulationEngine h(hourly); QVERIFY(h.assignLeader(1,2,actor()).ok()); until(h,h.calendar().horizonEnd());
+        SimulationEngine h(hourly); until(h,h.calendar().horizonEnd());
         auto a=SimulationReport::create(e), b=SimulationReport::create(h);
         a.remove("configuration"); b.remove("configuration"); QCOMPARE(a,b);
         auto invalid=s; invalid.seminarTime=QTime(17,30);
@@ -44,24 +43,17 @@ private slots:
         auto json=JsonCodec::setup(s); json["seminarPeriodDays"]=1.5;
         QVERIFY_EXCEPTION_THROWN(JsonCodec::setup(json),std::runtime_error);
     }
-    void initialCalendarAndPreviousGeneratorRoundTrip() {
-        auto s = config(); s.initialMeetings = true;
-        for (bool previous : {false, true}) {
-            SimulationEngine engine(s, false, previous);
-            QCOMPARE(engine.calendar().calendar().events.isEmpty(), previous);
-            auto restored = SimulationStore::restore(SimulationStore::snapshot(engine));
-            QCOMPARE(SimulationReport::create(*restored), SimulationReport::create(engine));
-            until(engine, modelDateTime(s.startDate.addDays(1)));
-            until(*restored, modelDateTime(s.startDate.addDays(1)));
-            QCOMPARE(SimulationReport::create(*restored), SimulationReport::create(engine));
-            auto resumed = SimulationStore::restore(SimulationStore::snapshot(engine));
-            QCOMPARE(SimulationReport::create(*resumed), SimulationReport::create(engine));
-        }
-        // Previously planned meetings may start less than five hours after t0.
-        s.workStart = QTime(1, 0); s.workEnd = QTime(3, 0);
-        SimulationEngine early(s);
-        QVERIFY(!early.calendar().calendar().events.isEmpty());
-        QCOMPARE(early.calendar().calendar().events.first().data.start.time(), QTime(1, 0));
+    void initialCalendarRoundTrip() {
+        auto s=config(); s.initialMeetings=true;
+        SimulationEngine engine(s);
+        QVERIFY(!engine.calendar().calendar().events.isEmpty());
+        auto restored=SimulationStore::restore(SimulationStore::snapshot(engine));
+        QCOMPARE(SimulationReport::create(*restored),SimulationReport::create(engine));
+        until(engine,modelDateTime(s.startDate.addDays(1)));
+        until(*restored,modelDateTime(s.startDate.addDays(1)));
+        QCOMPARE(SimulationReport::create(*restored),SimulationReport::create(engine));
+        auto resumed=SimulationStore::restore(SimulationStore::snapshot(engine));
+        QCOMPARE(SimulationReport::create(*resumed),SimulationReport::create(engine));
     }
     void remindersRepeatWithoutDuplicates() {
         auto s = config(); SimulationEngine e(s); auto data = meeting(s); QVERIFY(e.createEvent(data, actor()).ok());
@@ -97,21 +89,15 @@ private slots:
         auto restored = SimulationStore::restore(SimulationStore::snapshot(e));
         QCOMPARE(restored->emails().first().body, original);
     }
-    void legacyMailStateUpgradesWithoutLosingHistory() {
-        const auto path = QFINDTESTDATA("fixtures/legacy-email-state.json");
-        QVERIFY(!path.isEmpty());
-        const auto legacy = JsonCodec::read(path);
-        QCOMPARE(legacy["schemaVersion"].toInt(), 1);
-        auto restored = SimulationStore::restore(legacy);
-        QCOMPARE(restored->emails().size(), 2);
-        QCOMPARE(restored->emails().first().recipient, QString("employee1@work"));
-        QVERIFY(restored->emails().first().body.contains("Legacy reminder"));
-        const auto upgraded = SimulationStore::snapshot(*restored);
-        QCOMPARE(upgraded["schemaVersion"].toInt(), 3);
-        auto reloaded = SimulationStore::restore(upgraded);
-        QCOMPARE(SimulationReport::create(*restored), SimulationReport::create(*reloaded));
-        auto broken = legacy; broken["fingerprint"] = "wrong";
-        QVERIFY_EXCEPTION_THROWN(SimulationStore::restore(broken), std::runtime_error);
+    void obsoleteModelsAreRejectedExplicitly() {
+        SimulationEngine engine(config());
+        const auto current=SimulationStore::snapshot(engine);
+        const auto legacy=JsonCodec::read(QFINDTESTDATA("fixtures/legacy-email-state.json"));
+        QVERIFY_EXCEPTION_THROWN(SimulationStore::restore(legacy),std::runtime_error);
+        for (const auto *generator : {"live-minute-v4","live-minute-v5","daily-calendar-v6"}) {
+            auto old=current; old["generator"]=generator;
+            QVERIFY_EXCEPTION_THROWN(SimulationStore::restore(old),std::runtime_error);
+        }
     }
     void importanceChangesAndCancellation() {
         auto s = config(); s.reminders[0] = {0,1}; SimulationEngine e(s); auto data = meeting(s);
@@ -174,7 +160,7 @@ private slots:
         auto s = config(); s.requestRatePerWorkday = 12; s.changeRatePerWorkday = 2;
         s.conflictPolicy = ConflictPolicy::Suggest; SimulationEngine e(s);
         auto data = meeting(s); QVERIFY(e.createEvent(data,actor()).ok()); e.createEvent(data,actor());
-        QVERIFY(e.acceptSuggestion(2,0).ok()); QVERIFY(e.transferEmployee(1,2,actor()).ok());
+        QVERIFY(e.acceptSuggestion(2,0).ok());
         until(e, modelDateTime(s.startDate.addDays(2)));
         QTemporaryDir dir; QVERIFY(dir.isValid()); SimulationStore::save(dir.filePath("state.json"),e);
         auto restored = SimulationStore::load(dir.filePath("state.json"));

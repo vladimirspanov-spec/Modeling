@@ -1,5 +1,5 @@
-#include "src/services/calendarservice.h"
-#include "src/services/calendarsetup.h"
+#include "src/core/calendarservice.h"
+#include "src/core/calendarsetup.h"
 #include <QtTest>
 
 namespace {
@@ -46,21 +46,6 @@ private slots:
         f.scope = CalendarScope::Archive; QCOMPARE(service.calendar(f).events.size(), 1);
         f.dayTo = f.dayFrom; QVERIFY(!service.calendar(f).result.ok());
         f.dayTo.reset(); QVERIFY(!service.calendar(f).result.ok());
-    }
-    void explicitLeadersValidateOwnershipAndTransfers() {
-        CalendarService service(catalog(), at(0), at(23));
-        QVERIFY(service.assignLeader(1,2,secretary()).ok());
-        QCOMPARE(service.catalog().departments.value(1).leaderId,2);
-        QCOMPARE(service.assignLeader(1,3,secretary()).error,CalendarError::InvalidData);
-        QCOMPARE(service.assignLeader(1,1,{1,UserRole::Employee,{1}}).error,CalendarError::PermissionDenied);
-        QVERIFY(service.setEmployeeAvailable(2,false,secretary()).ok());
-        QCOMPARE(service.catalog().departments.value(1).leaderId,2); // Absence does not replace the leader.
-        QVERIFY(service.transferEmployee(2,2,secretary()).ok());
-        QCOMPARE(service.catalog().departments.value(1).leaderId,0);
-        QCOMPARE(service.catalog().departments.value(2).leaderId,0);
-        QVERIFY(service.assignLeader(2,2,secretary()).ok());
-        QVERIFY(service.advanceTo(at(23)).ok());
-        QCOMPARE(service.assignLeader(1,1,secretary()).error,CalendarError::InvalidState);
     }
     void createUpdateAndSnapshots() {
         CalendarService service(catalog(), at(0), at(23));

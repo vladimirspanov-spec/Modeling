@@ -1,5 +1,5 @@
 #pragma once
-#include "src/simulation/simulationengine.h"
+#include "src/core/simulationengine.h"
 #include <QWidget>
 #include <QStringList>
 #include <functional>

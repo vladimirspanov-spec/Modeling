@@ -1,5 +1,5 @@
 {
-  "source": "experiments/results/comparison.json",
+  "source": "documentation/experiments/results/comparison.json",
   "generator": "live-minute-v4",
   "runs": 120,
   "seeds": [

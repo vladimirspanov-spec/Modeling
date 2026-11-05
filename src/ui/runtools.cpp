@@ -1,7 +1,7 @@
 #include "runtools.h"
-#include "src/reporting/simulationreport.h"
-#include "src/storage/simulationstore.h"
-#include "src/storage/jsoncodec.h"
+#include "src/core/simulationreport.h"
+#include "src/core/simulationstore.h"
+#include "src/core/jsoncodec.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QTabWidget>

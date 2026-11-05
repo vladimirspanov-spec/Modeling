@@ -1,4 +1,4 @@
-#include "officescene.h"
+#include "src/ui/officescene.h"
 #include <QGraphicsScene>
 #include <QGraphicsTextItem>
 #include <QFontMetrics>
@@ -48,10 +48,8 @@ void populateOfficeScene(QGraphicsScene &scene, const CalendarService &calendar)
     QMap<int, QVector<Employee>> meetingOccupants;
     for (const auto &person : catalog.employees) {
         const int home = homeRooms.value(person.departmentId, OfficeLocation::Corridor);
-        const int idleLocation = home > 0 && !calendar.roomAvailable(home) ? OfficeLocation::Corridor : home;
-        const int location = !person.available ? OfficeLocation::Sick
-            : destinations.value(person.id, idleLocation);
-        if (location > 0 && person.available && destinations.contains(person.id))
+        const int location = destinations.value(person.id, home);
+        if (location > 0 && destinations.contains(person.id))
             meetingOccupants[location].append(person);
         else
             occupants[location].append(person);
@@ -88,8 +86,7 @@ void populateOfficeScene(QGraphicsScene &scene, const CalendarService &calendar)
         areas.insert(room.id, area);
         const QColor accent = room.departmentId ? departmentColor(*room.departmentId) : QColor("#64748b");
         const bool inUse = roomEvents.contains(room.id);
-        const bool available = calendar.roomAvailable(room.id);
-        auto *outline = scene.addRect(area, QPen(wall, 2), QBrush(available ? (inUse ? accent.lighter(190) : QColor("#ffffff")) : QColor("#f1f5f9")));
+        auto *outline = scene.addRect(area, QPen(wall, 2), QBrush(inUse ? accent.lighter(190) : QColor("#ffffff")));
         outline->setData(0, room.id); outline->setData(2, "room");
         outline->setToolTip(room.name);
         scene.addRect(x + 2, y + 2, roomWidth - 4, 5, Qt::NoPen, QBrush(accent));
@@ -112,15 +109,13 @@ void populateOfficeScene(QGraphicsScene &scene, const CalendarService &calendar)
             text(scene, QObject::tr("%1 сотрудников").arg(occupants.value(room.id).size()),
                  x + 10, workArea.top() + 26, roomWidth - 20, muted);
             text(scene, QObject::tr("Зона совещаний"), x + 10, meetingArea.top() + 2, roomWidth - 20, ink, true);
-            const QString description = !available ? QObject::tr("Помещение на ремонте")
-                : inUse ? roomEvents.value(room.id) : QObject::tr("Нет текущих мероприятий");
+            const QString description = inUse ? roomEvents.value(room.id) : QObject::tr("Нет текущих мероприятий");
             auto *subtitle = text(scene, QFontMetrics(QFont()).elidedText(description, Qt::ElideRight, int(roomWidth - 28)),
                                  x + 10, meetingArea.top() + 26, roomWidth - 20, muted);
             subtitle->setToolTip(description);
         } else {
             meetingAreas.insert(room.id, area);
-            const QString description = !available ? QObject::tr("Помещение на ремонте")
-                : inUse ? roomEvents.value(room.id) : QObject::tr("Нет текущих мероприятий");
+            const QString description = inUse ? roomEvents.value(room.id) : QObject::tr("Нет текущих мероприятий");
             auto *subtitle = text(scene, QFontMetrics(QFont()).elidedText(description, Qt::ElideRight, int(roomWidth - 28)),
                                  x + 10, y + 48, roomWidth - 20, muted);
             subtitle->setToolTip(description);
@@ -153,9 +148,6 @@ void populateOfficeScene(QGraphicsScene &scene, const CalendarService &calendar)
     };
     zone(OfficeLocation::Outside, QRectF(sideX, top, sideWidth, zoneHeight),
          QObject::tr("ВНЕ ОФИСА"), QObject::tr("Командировки"), QColor("#3b82b6"));
-    zone(OfficeLocation::Sick, QRectF(sideX, corridorY + corridorHeight, sideWidth, zoneHeight),
-         QObject::tr("БОЛЕЮТ"), QObject::tr("Временно отсутствуют"), QColor("#b46a7c"));
-    areas.insert(OfficeLocation::Corridor, QRectF(margin, corridorY - 48, officeWidth, corridorHeight + 48));
     auto drawPeople = [&](const QMap<int, QVector<Employee>> &groups, bool meeting) {
     for (auto group = groups.cbegin(); group != groups.cend(); ++group) {
         const QRectF area = meeting ? meetingAreas.value(group.key()) : areas.value(group.key());
@@ -166,8 +158,7 @@ void populateOfficeScene(QGraphicsScene &scene, const CalendarService &calendar)
             const qreal x = area.x() + 12 + (position % countAcross) * pitch;
             const qreal y = area.y() + (dividedRoom ? 60 : 92) + (position / countAcross) * pitch;
             ++position;
-            const bool sick = group.key() == OfficeLocation::Sick;
-            const QColor color = sick ? QColor("#a8a4ac") : departmentColor(person.departmentId);
+            const QColor color = departmentColor(person.departmentId);
             auto *circle = scene.addEllipse(x, y, 42, 42, QPen(color.darker(120), 1.5), QBrush(color.lighter(175)));
             circle->setData(0, person.id); circle->setData(1, group.key()); circle->setData(2, "employee");
             circle->setData(3, meeting ? "meeting" : dividedRoom ? "work" : "other");
@@ -177,7 +168,7 @@ void populateOfficeScene(QGraphicsScene &scene, const CalendarService &calendar)
             circle->setData(4, QPointF(aisleX, y + 21));
             circle->setData(5, QPointF(aisleX, corridorY + corridorHeight / 2));
             circle->setZValue(10);
-            const QString state = sick ? QObject::tr("Болеет") : group.key() == OfficeLocation::Outside ? QObject::tr("В командировке")
+            const QString state = group.key() == OfficeLocation::Outside ? QObject::tr("В командировке")
                 : activities.contains(person.id) ? activities.value(person.id) : QObject::tr("На рабочем месте");
             circle->setToolTip(QStringLiteral("%1 · %2\n%3\n%4").arg(person.publicId, person.name,
                 catalog.departments.value(person.departmentId).name, state));
@@ -187,19 +178,14 @@ void populateOfficeScene(QGraphicsScene &scene, const CalendarService &calendar)
             const auto bounds = label->boundingRect();
             label->setScale(std::min(qreal(1), 39 / bounds.width()));
             label->setPos(x + (42 - bounds.width() * label->scale()) / 2, y + (42 - bounds.height() * label->scale()) / 2);
-            if (sick) {
-                auto *badge = new QGraphicsTextItem(QObject::tr("Б"), circle);
-                badge->setDefaultTextColor(QColor("#9f3456"));
-                QFont badgeFont = badge->font(); badgeFont.setBold(true); badge->setFont(badgeFont);
-                badge->setPos(x + 30, y - 12);
-            }
+
         }
     }
     };
     drawPeople(occupants, false);
     drawPeople(meetingOccupants, true);
     const qreal footerY = top + buildingHeight + 24;
-    text(scene, QObject::tr("Цвет — отдел сотрудника · ID внутри кружка · Б — болезнь · Движение через проходы и коридор"),
+    text(scene, QObject::tr("Цвет — отдел сотрудника · ID внутри кружка · Движение через проходы и коридор"),
          margin, footerY, sideX + sideWidth - margin, muted);
     scene.setSceneRect(scene.itemsBoundingRect().adjusted(-20, -20, 20, 20));
 }
@@ -308,7 +294,7 @@ void OfficeAnimator::update(const CalendarService &calendar, int durationMs)
             item->setPos(along(points, value.toReal()) - destination.center);
         });
         connect(animation, &QVariantAnimation::finished, this, [item] { item->setPos(QPointF()); });
-        // Text and sickness badges are children of the circle and move with it.
+        // Text labels are children of the circle and move with it.
         item->setPos(points.first() - destination.center);
         animation->start();
     }

@@ -1,5 +1,5 @@
 #pragma once
-#include "src/services/calendarsetup.h"
+#include "src/core/calendarsetup.h"
 #include <QJsonObject>
 
 namespace JsonCodec {

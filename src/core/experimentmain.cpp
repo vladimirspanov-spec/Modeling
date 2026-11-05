@@ -1,7 +1,7 @@
 #include "experimentrunner.h"
-#include "src/storage/simulationstore.h"
-#include "src/storage/jsoncodec.h"
-#include "src/reporting/simulationreport.h"
+#include "src/core/simulationstore.h"
+#include "src/core/jsoncodec.h"
+#include "src/core/simulationreport.h"
 #include <QCoreApplication>
 #include <QCommandLineParser>
 #include <QDir>
@@ -11,7 +11,7 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     QCommandLineParser parser; parser.addHelpOption();
-    parser.addOption({"output", "Output directory", "directory", "experiments/results"});
+    parser.addOption({"output", "Output directory", "directory", "build/experiments/results"});
     parser.addOption({"repetitions", "Runs per case (six cases)", "count", "20"});
     parser.addOption({"config", "Configuration JSON", "path"});
     parser.addOption({"replay", "Replay saved state and export a report (no batch)", "path"});

@@ -15,11 +15,10 @@ enum class UserRole { Employee, Manager, Secretary };
 
 struct Department { int id; QString name; int leaderId = 0; }; // 0 means a vacant position.
 struct Employee {
-    int id; // Stable internal key: calendar references survive transfers.
+    int id; // Stable calendar reference.
     QString name;
     int departmentId;
-    QString publicId; // Department_sequence, never reused during a run.
-    bool available = true;
+    QString publicId; // Department_sequence.
 };
 struct Room { int id; QString name; std::optional<int> departmentId; };
 struct CompanyCatalog {

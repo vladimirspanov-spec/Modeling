@@ -1,31 +1,13 @@
 #include "simulationstore.h"
 #include "jsoncodec.h"
-#include "src/reporting/simulationreport.h"
+#include "src/core/simulationreport.h"
 #include <QJsonDocument>
 #include <QCryptographicHash>
 #include <stdexcept>
 
 namespace {
-QString fingerprint(const SimulationEngine &engine, int schemaVersion = 3) {
+QString fingerprint(const SimulationEngine &engine) {
     auto report = SimulationReport::create(engine);
-    if (schemaVersion < 3) {
-        auto configuration = report["configuration"].toObject();
-        for (const auto *key : {"periodicSeminars", "seminarPeriodDays", "seminarLeadDays", "seminarTime", "seminarDurationMinutes"})
-            configuration.remove(key);
-        report["configuration"] = configuration;
-        report.remove("departments");
-    }
-    if (schemaVersion == 1) {
-        // Validate old files against their original mail representation before upgrading it.
-        QJsonArray emails;
-        for (const auto &value : report["emails"].toArray()) {
-            auto email = value.toObject();
-            email.remove("body");
-            email["recipient"] = QStringLiteral("employee%1@example.invalid").arg(email["recipientId"].toInt());
-            emails.append(email);
-        }
-        report["emails"] = emails;
-    }
     const auto data = QJsonDocument(report).toJson(QJsonDocument::Compact) + engine.randomState().toUtf8();
     return QString::fromLatin1(QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex());
 }
@@ -40,17 +22,16 @@ QJsonObject SimulationStore::snapshot(const SimulationEngine &engine)
 std::unique_ptr<SimulationEngine> SimulationStore::restore(const QJsonObject &document)
 {
     const int schemaVersion = document["schemaVersion"].toInt();
-    check(document["format"] == "SecretarySimulation" && schemaVersion >= 1 && schemaVersion <= 3, "Unknown state format/version");
-    const bool legacy = document["generator"] == "live-minute-v4";
-    const bool previous = document["generator"] == "live-minute-v5";
-    check(legacy || (schemaVersion == 3 && (previous || document["generator"] == SimulationEngine::generatorVersion())), "Incompatible generator version");
+    check(document["format"] == "SecretarySimulation" && schemaVersion == 3, "Unknown state format/version");
+    check(document["generator"] == SimulationEngine::generatorVersion(),
+        "Сохранение создано другой версией модели. Начните новый прогон; параметры можно загрузить отдельно.");
     check(document["commands"].isArray(), "Missing command journal");
-    auto engine = std::make_unique<SimulationEngine>(JsonCodec::setup(document["configuration"].toObject()), legacy, previous);
+    auto engine = std::make_unique<SimulationEngine>(JsonCodec::setup(document["configuration"].toObject()));
     const auto commands = document["commands"].toArray();
     check(commands.size() <= 1000000, "Command journal too large");
     for (const auto &command : commands) { check(command.isObject(), "Invalid command"); engine->replayCommand(command.toObject()); }
     check(engine->commands() == commands, "Command replay mismatch");
-    check(fingerprint(*engine, schemaVersion) == document["fingerprint"].toString(), "State replay differs: modified file or incompatible C++ random library");
+    check(fingerprint(*engine) == document["fingerprint"].toString(), "State replay differs: modified file or incompatible C++ random library");
     check(SimulationReport::create(*engine)["events"] == document["calendar"], "Calendar snapshot mismatch");
     return engine; // Caller replaces the current engine only after all validation succeeds.
 }

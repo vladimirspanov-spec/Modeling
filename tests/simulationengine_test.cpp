@@ -1,4 +1,4 @@
-#include "src/simulation/simulationengine.h"
+#include "src/core/simulationengine.h"
 #include <QtTest>
 
 namespace {
@@ -49,7 +49,6 @@ private slots:
         }
         QCOMPARE(starts.size(),3);
         for (int i=1;i<starts.size();++i) QCOMPARE(starts[i-1].daysTo(starts[i]),qint64(7));
-        QVERIFY(engine.participants().value(first.data.organizerId).skill >= 10);
         QCOMPARE(engine.calendar().event(first.id)->status,EventStatus::Completed);
     }
     void seminarWeekendsAndConflictsAreHandled() {
@@ -74,32 +73,13 @@ private slots:
         }
         QVERIFY(days.size()>1);
     }
-    void existingWeeklyMeetingRetainsParticipantsAfterLeaderChange() {
-        auto config = setup(); config.initialMeetings = true;
-        SimulationEngine engine(config);
-        const UserContext actor{1,UserRole::Secretary,{}};
-        QVERIFY(engine.assignLeader(1,2,actor).ok());
-        QVERIFY(engine.transferEmployee(9,3,actor).ok()); // Department 2 has no leader now.
-        until(engine,modelDateTime(config.startDate,QTime(18,0)));
-        bool found=false;
-        for (const auto &event:engine.calendar().calendar(CalendarFilter{CalendarScope::All}).events) if(event.data.type==EventType::ManagementMeeting) {
-            found=true;
-            QVERIFY(event.data.participantIds.contains(1));
-            QVERIFY(!event.data.participantIds.contains(2));
-            QVERIFY(event.data.participantIds.contains(9));
-            QCOMPARE(event.data.participantIds.size(),config.departmentCount);
-        }
-        QVERIFY(found);
-        engine.reset(); QCOMPARE(engine.calendar().catalog().departments.value(1).leaderId,1);
-    }
     void randomManagementMeetingUsesAppointedLeaders() {
         auto config = setup(); config.participantsMin = config.departmentCount;
         SimulationEngine engine(config);
-        QVERIFY(engine.assignLeader(1,2,{1,UserRole::Secretary,{}}).ok());
         QVERIFY(engine.trigger(ScenarioKind::ManagementMeeting).ok());
         const auto event = engine.calendar().calendar().events.first();
-        QVERIFY(event.data.participantIds.contains(2));
-        QVERIFY(!event.data.participantIds.contains(1));
+        QVERIFY(event.data.participantIds.contains(1));
+        QVERIFY(!event.data.participantIds.contains(2));
         for (int id : event.data.participantIds) {
             const auto &catalog = engine.calendar().catalog();
             QCOMPARE(catalog.departments.value(catalog.employees.value(id).departmentId).leaderId,id);
@@ -163,28 +143,20 @@ private slots:
             QCOMPARE(created, 10 * count + 2); // No duplicate generation during the run.
         }
     }
-    void planNoticeBoundaryAndLifecycle() {
+    void shortNoticeAndLifecycle() {
         SimulationEngine engine(setup());
-        const auto created = engine.calendar().modelTime();
-        EventData data;
-        data.title = "Notice"; data.organizerId = 1; data.participantIds = {1};
-        data.start = created.addSecs(5 * 3600 - 1); data.end = data.start.addSecs(1800);
+        const auto now = engine.calendar().modelTime();
         const UserContext actor{1, UserRole::Secretary, {}};
-        QCOMPARE(engine.createEvent(data, actor).error, CalendarError::InvalidTime);
-        data.start = created.addSecs(5 * 3600); data.end = data.start.addSecs(1800);
-        const auto result = engine.createEvent(data, actor);
-        QVERIFY(result.ok());
-        until(engine, created.addSecs(4 * 3600 + 1800));
-        QCOMPARE(engine.calendar().event(result.eventId)->status, EventStatus::Planned);
-        data.title = "Edited while waiting";
-        QVERIFY(engine.updateEvent(result.eventId, data, actor).ok());
-        auto tooEarly = data; tooEarly.start = created.addSecs(5 * 3600 - 1);
-        QCOMPARE(engine.updateEvent(result.eventId, tooEarly, actor).error, CalendarError::InvalidTime);
+        EventData data; data.title="Short notice"; data.organizerId=1; data.participantIds={1};
+        data.start=now.addSecs(60); data.end=now.addSecs(1200);
+        const auto result=engine.createEvent(data,actor); QVERIFY(result.ok());
+        data.start=now.addSecs(120); data.end=now.addSecs(1500);
+        QVERIFY(engine.updateEvent(result.eventId,data,actor).ok());
+        auto past=data; past.start=now.addSecs(-60);
+        QCOMPARE(engine.updateEvent(result.eventId,past,actor).error,CalendarError::InvalidTime);
         QVERIFY(engine.step().ok());
-        QCOMPARE(engine.calendar().event(result.eventId)->status, EventStatus::InProgress);
-        QVERIFY(engine.step().ok());
-        QCOMPARE(engine.calendar().event(result.eventId)->status, EventStatus::Completed);
-        QCOMPARE(engine.calendar().history(result.eventId).last().timestamp, data.end);
+        QCOMPARE(engine.calendar().event(result.eventId)->status,EventStatus::Completed);
+        QCOMPARE(engine.calendar().history(result.eventId).last().timestamp,data.end);
     }
     void generatedNoticeAndDiversity() {
         bool hours = false, days = false;
@@ -201,7 +173,7 @@ private slots:
                 const auto event = engine.calendar().event(result.eventId).value();
                 const auto created = engine.calendar().history(result.eventId).first().timestamp;
                 const auto notice = created.secsTo(event.data.start);
-                QVERIFY(notice >= 5 * 3600);
+                QVERIFY(notice >= 0);
                 QCOMPARE(event.status, EventStatus::Planned);
                 intervals.insert(notice);
                 hours |= notice < 24 * 3600; days |= notice >= 2 * 24 * 3600;
@@ -211,7 +183,7 @@ private slots:
             until(preset, modelDateTime(config.startDate, QTime(18, 0)));
             for (const auto &event : preset.calendar().calendar().events) {
                 const auto created = preset.calendar().history(event.id).first().timestamp;
-                QVERIFY(created.secsTo(event.data.start) >= 5 * 3600);
+                QVERIFY(created.secsTo(event.data.start) >= 0);
                 QCOMPARE(event.status, EventStatus::Planned);
                 creationTimes.insert(created.time());
             }
@@ -243,82 +215,14 @@ private slots:
         until(different, different.calendar().horizonEnd());
         QVERIFY(transcript(different) != expected);
     }
-    void dependencies() {
-        SimulationEngine engine(setup());
-        QVERIFY(!engine.trigger(ScenarioKind::Recovery).ok());
-        QVERIFY(!engine.trigger(ScenarioKind::ConflictResolved).ok());
-        QVERIFY(!engine.trigger(ScenarioKind::RoomRestored).ok());
-        QVERIFY(!engine.trigger(ScenarioKind::WorkloadNormalized).ok());
-        QVERIFY(engine.trigger(ScenarioKind::ConflictStarted).ok());
-        QVERIFY(!engine.trigger(ScenarioKind::ConflictResolved).ok());
-        QVERIFY(engine.trigger(ScenarioKind::RoomFailure).ok());
-        QVERIFY(!engine.trigger(ScenarioKind::RoomRestored).ok());
-        QVERIFY(engine.trigger(ScenarioKind::SickLeave).ok());
-        QVERIFY(!engine.trigger(ScenarioKind::Recovery).ok());
-        until(engine, modelDateTime(QDate(2026, 10, 13)));
-        QVERIFY(engine.trigger(ScenarioKind::Recovery).ok());
-        QVERIFY(engine.trigger(ScenarioKind::ConflictResolved).ok());
-        QVERIFY(engine.trigger(ScenarioKind::RoomRestored).ok());
-        QVERIFY(!engine.trigger(ScenarioKind::RoomRestored).ok());
-        QVERIFY(engine.trigger(ScenarioKind::WorkloadSurge).ok());
-        QVERIFY(engine.trigger(ScenarioKind::WorkloadNormalized).ok());
-        for (const auto &employee : engine.calendar().catalog().employees) QVERIFY(employee.available);
-        for (const auto &state : engine.organizations()) QVERIFY(!state.conflictSince && !state.overloaded);
-    }
-    void stableReferencesAndUniqueTransfers() {
-        SimulationEngine engine(setup());
-        QCOMPARE(engine.calendar().participantCode(1), QString("1_01"));
-        QCOMPARE(engine.calendar().participantCode(9), QString("2_01"));
-        EventData data;
-        data.title = "History"; data.organizerId = 1; data.participantIds = {1};
-        data.start = modelDateTime(QDate(2026, 10, 12), QTime(6, 0));
-        data.end = data.start.addSecs(1800);
-        const UserContext actor{1, UserRole::Secretary, {}};
-        QVERIFY(engine.createEvent(data, actor).ok());
-        QVERIFY(engine.transferEmployee(1, 2, actor).ok());
-        QCOMPARE(engine.calendar().participantCode(1), QString("2_09"));
-        QCOMPARE(engine.calendar().event(1)->data.participantIds, QVector<int>{1});
-        QCOMPARE(engine.calendar().event(1)->participantCodes.value(1), QString("2_09"));
-        QCOMPARE(engine.calendar().history(1).first().snapshot.participantCodes.value(1), QString("1_01"));
-        QVERIFY(!engine.calendar().participantKey("1_01"));
-        until(engine, data.end);
-        QVERIFY(engine.transferEmployee(1, 1, actor).ok());
-        QCOMPARE(engine.calendar().participantCode(1), QString("1_09"));
-        QCOMPARE(engine.calendar().event(1)->participantCodes.value(1), QString("2_09"));
-        CalendarFilter filter; filter.scope = CalendarScope::Archive; filter.departmentId = 2;
-        QCOMPARE(engine.calendar().calendar(filter).events.size(), 1);
-        QVERIFY(engine.transferEmployee(1, 2, actor).ok());
-        QCOMPARE(engine.calendar().participantCode(1), QString("2_10"));
-        QSet<QString> ids;
-        for (const auto &person : engine.calendar().catalog().employees) { QVERIFY(!ids.contains(person.publicId)); ids.insert(person.publicId); }
-    }
-    void absenceAndRoomClosureCancelFutureEvents() {
-        auto config = setup();
-        CalendarService calendar(makeCompanyCatalog(config), modelDateTime(config.startDate), modelDateTime(config.startDate.addDays(7)));
-        EventData data; data.title = "Meeting"; data.organizerId = 1; data.participantIds = {1}; data.roomId = 1;
-        data.start = modelDateTime(config.startDate, QTime(10, 0)); data.end = data.start.addSecs(3600);
-        const UserContext actor{1, UserRole::Secretary, {}};
-        QVERIFY(calendar.createEvent(data, actor).ok());
-        QVERIFY(calendar.setEmployeeAvailable(1, false, actor).ok());
-        QCOMPARE(calendar.event(1)->status, EventStatus::Cancelled);
-        QVERIFY(!calendar.createEvent(data, actor).ok());
-        QVERIFY(calendar.setEmployeeAvailable(1, true, actor).ok());
-        QVERIFY(calendar.createEvent(data, actor).ok());
-        QVERIFY(calendar.setRoomAvailable(1, false, actor).ok());
-        QCOMPARE(calendar.event(2)->status, EventStatus::Cancelled);
-        QVERIFY(!calendar.createEvent(data, actor).ok());
-        QVERIFY(calendar.setRoomAvailable(1, true, actor).ok());
-        QVERIFY(calendar.createEvent(data, actor).ok());
-    }
-    void catalogAndCompletionEffects() {
-        QCOMPARE(SimulationEngine::eventCatalog().size(), 19);
+    void calendarEventsCompleteWithoutPersonnelEffects() {
+        QCOMPARE(SimulationEngine::eventCatalog().size(), 6);
         auto config = setup(); config.leadTimeMinWorkdays = config.leadTimeMaxWorkdays = 0;
         SimulationEngine engine(config);
         QVERIFY(engine.trigger(ScenarioKind::Seminar).ok());
         const auto event = engine.calendar().calendar().events.first();
-        for (int id : event.data.participantIds) QCOMPARE(engine.participants().value(id).skill, 0);
         until(engine, event.data.end);
-        for (int id : event.data.participantIds) QCOMPARE(engine.participants().value(id).skill, 10);
+        QCOMPARE(engine.calendar().event(event.id)->status, EventStatus::Completed);
     }
 };
 QTEST_APPLESS_MAIN(SimulationEngineTest)

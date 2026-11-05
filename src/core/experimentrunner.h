@@ -1,5 +1,5 @@
 #pragma once
-#include "src/simulation/simulationengine.h"
+#include "src/core/simulationengine.h"
 #include <memory>
 
 struct ExperimentCase { QString name; CalendarSetup setup; };

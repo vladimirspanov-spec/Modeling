@@ -1,6 +1,6 @@
 #include "experimentrunner.h"
-#include "src/reporting/simulationreport.h"
-#include "src/storage/jsoncodec.h"
+#include "src/core/simulationreport.h"
+#include "src/core/jsoncodec.h"
 #include <cmath>
 #include <limits>
 #include <stdexcept>
