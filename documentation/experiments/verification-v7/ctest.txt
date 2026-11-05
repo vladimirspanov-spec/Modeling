@@ -1,0 +1,13 @@
+Test project /Users/panov/Projects/Modeling/build/reorganized
+    Start 1: calendarservice
+1/4 Test #1: calendarservice ..................   Passed    0.02 sec
+    Start 2: simulationengine
+2/4 Test #2: simulationengine .................   Passed    1.48 sec
+    Start 3: completion
+3/4 Test #3: completion .......................   Passed    3.06 sec
+    Start 4: calendarwindow
+4/4 Test #4: calendarwindow ...................   Passed    2.43 sec
+
+100% tests passed out of 4
+
+Total Test time (real) =   6.99 sec

@@ -1,0 +1,14 @@
+\resizebox{\linewidth}{!}{\begin{tikzpicture}
+\node[uml] (catalog) at (0,0) {\textbf{CompanyCatalog}\par\hrule\smallskip departments: QMap\par employees: QMap\par rooms: QMap};
+\node[uml] (department) at (-5,-3) {\textbf{Department}\par\hrule\smallskip id: int\par name: QString\par leaderId: int};
+\node[uml] (employee) at (0,-3) {\textbf{Employee}\par\hrule\smallskip id: int\par name: QString\par departmentId: int\par publicId: QString};
+\node[uml] (room) at (5,-3) {\textbf{Room}\par\hrule\smallskip id: int\par name: QString\par departmentId: optional<int>};
+\draw[composition] (catalog.south west)--(department.north) node[midway,left] {5..9};
+\draw[composition] (catalog.south)--(employee.north) node[midway,right] {1..*};
+\draw[composition] (catalog.south east)--(room.north) node[midway,right] {K+1};
+\node[uml] (event) at (-2.5,-6.7) {\textbf{CalendarEvent}\par\hrule\smallskip id, version, scheduleVersion\par status: EventStatus\par data: EventData\par participantCodes, organizerCode};
+\node[uml] (data) at (2.5,-6.7) {\textbf{EventData}\par\hrule\smallskip title, type, start, end\par roomId: optional<int>\par participantIds: QVector<int>\par organizerId, importance};
+\draw[composition] (event.east)--(data.west) node[midway,above] {1};
+\draw[dep] (data.north)--(employee.south) node[pos=.35,below,sloped,fill=white,inner sep=1pt,font=\scriptsize] {участники};
+\draw[dep] (data.north east)--(room.south) node[midway,right] {ID};
+\end{tikzpicture}}

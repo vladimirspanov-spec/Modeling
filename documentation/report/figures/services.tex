@@ -1,0 +1,19 @@
+\resizebox{\linewidth}{!}{\begin{tikzpicture}
+\node[uml] (engine) at (0,0) {\textbf{SimulationEngine}\par\hrule\smallskip setup, random, requests, log\par step(), reset(), trigger()\par createEvent(), updateEvent()\par acceptSuggestion()};
+\node[uml] (calendar) at (-5,-4) {\textbf{CalendarService}\par\hrule\smallskip catalog, active, archive, history\par checkEvent(), createEvent()\par updateEvent(), calendar()\par advanceTo()};
+\node[uml] (reminders) at (0,-4) {\textbf{ReminderService}\par\hrule\smallskip pending: QMap\par observe(records, rules)\par deliver(calendar, channel)\par clear()};
+\node[uml] (email) at (5,-4) {\textbf{SimulatedEmailChannel}\par\hrule\smallskip messages: QVector\par send(EmailMessage)\par messages(), clear()};
+\draw[composition] (engine.south west)--(calendar.north);
+\draw[composition] (engine.south)--(reminders.north);
+\draw[composition] (engine.south east)--(email.north);
+\node[uml] (channel) at (5,-7.4) {\textit{NotificationChannel}\par\hrule\smallskip virtual send(message) = 0\par virtual destructor};
+\draw[-{Triangle[open,length=3mm]},thick] (email.south)--(channel.north);
+\draw[dep] (reminders.south)--(channel.west) node[midway,below,sloped] {использует};
+\node[uml] (resolver) at (-5,-7.4) {\textbf{ConflictResolver}\par\hrule\smallskip static alternatives(calendar,\par setup, requested, actor, id)};
+\draw[dep] (engine.west)--++(-3.1,0)--++(-4.4,0)|-(resolver.west);
+\draw[dep] (resolver.north)--(calendar.south);
+\node[uml] (report) at (-5,-10.6) {\textbf{SimulationReport}\par\hrule\smallskip create(), metrics(), csv()\par summary()};
+\node[uml] (store) at (0,-10.6) {\textbf{SimulationStore}\par\hrule\smallskip snapshot(), restore()\par save(), load()};
+\node[uml] (runner) at (5,-10.6) {\textbf{ExperimentRunner}\par\hrule\smallskip current: unique\_ptr<Engine>\par comparison(), advance()\par report(), csv()};
+\end{tikzpicture}}
+\par\smallskip{\footnotesize SimulationReport читает движок; SimulationStore воспроизводит его команды; ExperimentRunner создаёт независимый движок каждого прогона. Эти зависимости вынесены в подпись, чтобы не перегружать линии диаграммы.}

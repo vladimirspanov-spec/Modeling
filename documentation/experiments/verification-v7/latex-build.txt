@@ -1,0 +1,48 @@
+note: Running TeX ...
+warning: accessing absolute path `/System/Library/Fonts/Supplemental/Times New Roman.ttf`; build may not be reproducible in other environments
+warning: accessing absolute path `/System/Library/Fonts/Supplemental/Times New Roman Italic.ttf`; build may not be reproducible in other environments
+warning: accessing absolute path `/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf`; build may not be reproducible in other environments
+warning: accessing absolute path `/System/Library/Fonts/Supplemental/Times New Roman Bold Italic.ttf`; build may not be reproducible in other environments
+warning: accessing absolute path `/System/Library/Fonts/Supplemental/Arial.ttf`; build may not be reproducible in other environments
+warning: accessing absolute path `/System/Library/Fonts/Supplemental/Arial Italic.ttf`; build may not be reproducible in other environments
+warning: accessing absolute path `/System/Library/Fonts/Supplemental/Arial Bold.ttf`; build may not be reproducible in other environments
+warning: accessing absolute path `/System/Library/Fonts/Supplemental/Arial Bold Italic.ttf`; build may not be reproducible in other environments
+warning: accessing absolute path `/System/Library/Fonts/Menlo.ttc`; build may not be reproducible in other environments
+warning: sections/02-design:7: Underfull \hbox (badness 10000) in paragraph at lines 6--7
+warning: sections/02-design:7: Underfull \hbox (badness 4595) in paragraph at lines 6--7
+warning: sections/02-design:7: Underfull \hbox (badness 1314) in paragraph at lines 6--7
+warning: figures/domain:14: Underfull \hbox (badness 1365) in paragraph at lines 14--14
+warning: sections/02-design:28: Underfull \hbox (badness 1383) in paragraph at lines 24--28
+warning: sections/02-design:28: Underfull \hbox (badness 3396) in paragraph at lines 24--28
+warning: sections/03-specifications:4: Underfull \hbox (badness 4366) in paragraph at lines 3--4
+warning: sections/03-specifications:6: Underfull \hbox (badness 7116) in paragraph at lines 5--6
+warning: sections/03-specifications:6: Underfull \hbox (badness 2368) in paragraph at lines 5--6
+warning: sections/03-specifications:11: Underfull \hbox (badness 2111) in paragraph at lines 10--11
+warning: sections/03-specifications:27: Underfull \hbox (badness 10000) in paragraph at lines 26--27
+warning: sections/03-specifications:27: Underfull \hbox (badness 2503) in paragraph at lines 26--27
+warning: sections/03-specifications:41: Underfull \hbox (badness 10000) in paragraph at lines 41--41
+warning: sections/03-specifications:53: Underfull \hbox (badness 3907) in paragraph at lines 53--53
+warning: sections/03-specifications:63: Underfull \hbox (badness 1173) in paragraph at lines 63--63
+warning: sections/09-verification:16: Underfull \hbox (badness 1205) in paragraph at lines 15--16
+note: Rerunning TeX because "report.aux" changed ...
+warning: sections/02-design:7: Underfull \hbox (badness 10000) in paragraph at lines 6--7
+warning: sections/02-design:7: Underfull \hbox (badness 4595) in paragraph at lines 6--7
+warning: sections/02-design:7: Underfull \hbox (badness 1314) in paragraph at lines 6--7
+warning: figures/domain:14: Underfull \hbox (badness 1365) in paragraph at lines 14--14
+warning: sections/02-design:28: Underfull \hbox (badness 1383) in paragraph at lines 24--28
+warning: sections/02-design:28: Underfull \hbox (badness 3396) in paragraph at lines 24--28
+warning: sections/03-specifications:4: Underfull \hbox (badness 4366) in paragraph at lines 3--4
+warning: sections/03-specifications:6: Underfull \hbox (badness 7116) in paragraph at lines 5--6
+warning: sections/03-specifications:6: Underfull \hbox (badness 2368) in paragraph at lines 5--6
+warning: sections/03-specifications:11: Underfull \hbox (badness 2111) in paragraph at lines 10--11
+warning: sections/03-specifications:27: Underfull \hbox (badness 10000) in paragraph at lines 26--27
+warning: sections/03-specifications:27: Underfull \hbox (badness 2503) in paragraph at lines 26--27
+warning: sections/03-specifications:41: Underfull \hbox (badness 10000) in paragraph at lines 41--41
+warning: sections/03-specifications:53: Underfull \hbox (badness 3907) in paragraph at lines 53--53
+warning: sections/03-specifications:63: Underfull \hbox (badness 1173) in paragraph at lines 63--63
+warning: sections/09-verification:16: Underfull \hbox (badness 1205) in paragraph at lines 15--16
+warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details.
+note: Running xdvipdfmx ...
+note: Writing `report.log` (35.2744140625 KiB)
+note: Writing `report.pdf` (207.5859375 KiB)
+note: Skipped writing 3 intermediate files (use --keep-intermediates to keep them)

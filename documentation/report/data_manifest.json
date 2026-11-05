@@ -1,6 +1,7 @@
 {
-  "source": "documentation/experiments/results/comparison.json",
-  "generator": "live-minute-v4",
+  "source": "documentation/experiments/results-v7/comparison.json",
+  "source_sha256": "431dd570c8a53191b6497c15c50cd8ee09cabce69d6ed171c5b53a54ac606379",
+  "generator": "calendar-v7",
   "runs": 120,
   "seeds": [
     42,
@@ -24,5 +25,27 @@
     60,
     61
   ],
-  "validation": "all run balances, means and sample standard deviations recomputed"
+  "validation": "run balances, means and sample standard deviations recomputed",
+  "core_source_sha256": {
+    "src/core/calendarevent.h": "32fbb1cafb8294116f1b348eaef06d042d6585bd3aff76f22ac76d7270e0e13c",
+    "src/core/calendarservice.cpp": "84cb2e596dd416695bc7bdfae703feeb600ee8b1ceee6995b2bcf1f42bbd651a",
+    "src/core/calendarservice.h": "7ea7cb4ea4d6e1f10d372832361b3b5e6711248c71c56db3320c3ad3876dadf2",
+    "src/core/calendarsetup.cpp": "a24d53626ee263c4dc5f5aa06004bf8099a3951ec4c2283ede980c7960c262ea",
+    "src/core/calendarsetup.h": "3f86a1cf037be2f5eca6715480dc8e965ee616c3b790ca1317bb7ce65f2bfbe1",
+    "src/core/conflictresolver.cpp": "bd939cec496f3e5a7605306315a032b27fbf394eea08c7a87f730194a02f4f93",
+    "src/core/conflictresolver.h": "9a2d5cc218113856a33a442ed5902e539e5d2232ade2de18c7e249dd4fc428aa",
+    "src/core/experimentmain.cpp": "bda4e80726bb4703bf74368bd452c3acd28b76253b831b4181b40ec859082a3a",
+    "src/core/experimentrunner.cpp": "338dc7bed1c776ce2fc27a1c5bd6b6518c18a775337d92961638786a1b34bfd1",
+    "src/core/experimentrunner.h": "fdfd1e12f520d9b1fb2a91416c8beed9c6a68297bf8aa672d6c9a13c1a449188",
+    "src/core/jsoncodec.cpp": "eb04cdbdb03bc515d6ef27851f05e48b5446a96f9e6eb62e79eb965cdb993071",
+    "src/core/jsoncodec.h": "81f2c5040a770b4b327164945bd43378885fa4760a73f30d85b35c405b8a11d6",
+    "src/core/reminderservice.cpp": "d691fbcda75620347d0e5a8ce67b90374fb27e74eb1c1155c5b040ac80c150ba",
+    "src/core/reminderservice.h": "bc63cfca7fc8414dfabbc70c65b305181e34c712bd9d1fc9837f60d86b35e212",
+    "src/core/simulationengine.cpp": "58f7cb5366b255e0e6190d0f728a1b7000633195bdb8cf3089cdb992dc6ab985",
+    "src/core/simulationengine.h": "843032d30c93e1e0cf40167407eb7ce9ad4ec18ef96b1c09e271cca79b53023e",
+    "src/core/simulationreport.cpp": "31ed1705aede89b6bc15d1c15ba33bdba5271ec5725d2467b658907acf892d25",
+    "src/core/simulationreport.h": "2a6d688399cf3cf0c5e9d3b9405d489e7775b97e41c8ba3c372a4498213f9dcd",
+    "src/core/simulationstore.cpp": "ce4c3e558dcaba976df98c25e23c7e28426665e57b31656b8b76d3bf06ee4313",
+    "src/core/simulationstore.h": "780c242eb71a751888e7975120ffe90a434e9430a627fab2fce09a689659cd70"
+  }
 }

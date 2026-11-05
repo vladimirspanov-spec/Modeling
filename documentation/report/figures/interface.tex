@@ -1,0 +1,19 @@
+\resizebox{\linewidth}{!}{\begin{tikzpicture}
+\node[uml] (qwidget) at (-5,0) {\textit{QWidget}};
+\node[uml] (qdialog) at (0,0) {\textit{QDialog}};
+\node[uml] (qobject) at (5,0) {\textit{QObject}};
+\node[uml] (widget) at (-5,-2.4) {\textbf{Widget}\par\hrule\smallskip параметры, роль\par открытие нового прогона\par загрузка и серия опытов};
+\node[uml] (window) at (0,-2.4) {\textbf{SimulationWindow}\par\hrule\smallskip engine: SimulationEngine\par timer: QTimer\par календарь и ручные действия};
+\node[uml] (animator) at (5,-2.4) {\textbf{OfficeAnimator}\par\hrule\smallskip scene: QGraphicsScene\par update(), pause(), resume()\par finish(), retime()};
+\draw[-{Triangle[open,length=3mm]}] (widget.north)--(qwidget.south);
+\draw[-{Triangle[open,length=3mm]}] (window.north west)--(qwidget.south east);
+\draw[-{Triangle[open,length=3mm]}] (animator.north)--(qobject.south);
+\node[uml] (tools) at (-5,-5.5) {\textbf{RunTools : QWidget}\par\hrule\smallskip заявки и выбор переноса\par письма и экспорт};
+\node[uml] (dialog) at (0,-5.5) {\textbf{ExperimentDialog}\par\hrule\smallskip runner: ExperimentRunner\par прогресс, остановка, экспорт};
+\node[uml] (engine) at (5,-5.5) {\textbf{SimulationEngine}\par\hrule\smallskip ядро, без Qt Widgets};
+\draw[dep] (widget.east)--(window.west) node[midway,above] {создаёт};
+\draw[composition] (window.south west)--(tools.north east);
+\draw[composition] (window.south east)--(engine.north west);
+\draw[dep] (window.east)--(animator.west);
+\draw[-{Triangle[open,length=3mm]}] (dialog.north east)--++(0.8,0.4)--++(0,4.1)--(qdialog.east);
+\end{tikzpicture}}

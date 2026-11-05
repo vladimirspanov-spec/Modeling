@@ -159,7 +159,7 @@ Widget::Widget(QWidget *parent) : QWidget(parent)
     auto *saveConfig = new QPushButton(tr("Сохранить настройки…"));
     auto *loadConfig = new QPushButton(tr("Загрузить настройки…"));
     auto *loadState = new QPushButton(tr("Открыть состояние…"));
-    auto *batch = new QPushButton(tr("Пакетные эксперименты…"));
+    auto *batch = new QPushButton(tr("Провести серию экспериментов…"));
     for (auto *button : {saveConfig, loadConfig, loadState, batch}) files->addWidget(button);
     layout->addLayout(files);
     connect(saveConfig, &QPushButton::clicked, this, [this] {

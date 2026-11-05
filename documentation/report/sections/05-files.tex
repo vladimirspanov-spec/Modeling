@@ -1,0 +1,65 @@
+\section{Файловая и модульная структура}
+\begin{lstlisting}
+CMakeLists.txt
+README.md
+src/
+  main.cpp
+  core/
+    calendarevent.h
+    calendarsetup.h/.cpp
+    calendarservice.h/.cpp
+    simulationengine.h/.cpp
+    conflictresolver.h/.cpp
+    reminderservice.h/.cpp
+    jsoncodec.h/.cpp
+    simulationstore.h/.cpp
+    simulationreport.h/.cpp
+    experimentrunner.h/.cpp
+    experimentmain.cpp
+  ui/
+    widget.h/.cpp
+    simulationwindow.h/.cpp
+    officescene.h/.cpp
+    runtools.h/.cpp
+    experimentdialog.h/.cpp
+tests/
+  calendarservice_test.cpp
+  simulationengine_test.cpp
+  completion_test.cpp
+  calendarwindow_test.cpp
+  fixtures/
+documentation/
+  README.md
+  MODEL.md
+  ARCHITECTURE.md
+  report/
+    report.tex
+    sections/
+    figures/
+    make_results.py
+    results_table.tex
+    results_text.tex
+    data_manifest.json
+  experiments/
+    results-v7/
+    verification-v7/
+\end{lstlisting}
+
+\begin{longtable}{L{0.35\linewidth}L{0.57\linewidth}}
+\toprule Файл или группа & Ответственность \\\midrule\endhead
+\file{calendarevent.h} & Структуры данных компании, событий, фильтров, истории, контекста и результата операций. \\
+\file{calendarsetup.*} & Параметры опыта, создание исходного каталога, преобразование модельной даты и времени. \\
+\file{calendarservice.*} & Проверки ресурсов и прав, активный календарь, архив, история, переходы статусов. \\
+\file{simulationengine.*} & Начальный календарь, модельная минута, случайные сценарии, заявки и команды. \\
+\file{conflictresolver.*}, \file{reminderservice.*} & Варианты переносов, планировщик уведомлений и имитируемый канал. \\
+\file{jsoncodec.*}, \file{simulationstore.*} & JSON, проверка файлов, сохранение и контролируемое воспроизведение. \\
+\file{simulationreport.*} & Метрики, полный JSON, CSV и текстовая сводка. \\
+\file{experimentrunner.*}, \file{experimentmain.cpp} & Серии опытов, агрегирование и консольная точка входа. \\
+\file{src/ui} & Только представление и управление через публичные операции ядра. \\
+\file{tests} & Четыре набора автоматических проверок. \\
+\file{documentation/experiments/results-v7} & Фактические наблюдения текущего исследования, настройки, пример отчёта и сохранения. \\
+\file{documentation/experiments/verification-v7} & Логи сборки и проверки, JUnit XML и сведения о среде. \\
+\bottomrule
+\end{longtable}
+
+\code{calendar_core} зависит от Qt Core; \code{calendar_ui} --- от ядра и Qt Widgets. \code{Modeling} запускает GUI через \file{src/main.cpp}. \code{modeling_experiments} работает с \code{QCoreApplication} и не требует дисплея. Локальные \file{build/} и \file{.qtcreator/} содержат служебные данные и исключаются из Git. Каталог \file{documentation/experiments/results} содержит исторические измерения v4 и не подменяет набор \file{results-v7}.

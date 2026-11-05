@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Darwin-c++"
+	tests="4"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname="MacBook-Air-Panov.local"
+	time="6"
+	timestamp="2026-11-06T00:21:53"
+	>
+	<testcase name="calendarservice" classname="calendarservice" time="0.0159363" status="run">
+		<properties/>
+		<system-out>********* Start testing of CalendarServiceTest *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (arm64-little_endian-lp64 shared (dynamic) release build; by Apple LLVM 21.0.0 (clang-2100.1.1.101)), macos 26.5.1
+PASS   : CalendarServiceTest::initTestCase()
+PASS   : CalendarServiceTest::hoursApplyToEveryDayAndRespectBoundaries()
+PASS   : CalendarServiceTest::createUpdateAndSnapshots()
+PASS   : CalendarServiceTest::conflictsAndAtomicUpdate()
+PASS   : CalendarServiceTest::validationAndPermissions()
+PASS   : CalendarServiceTest::lifecycleAndArchive()
+PASS   : CalendarServiceTest::filtersAndMultiday()
+PASS   : CalendarServiceTest::stepIndependenceAndHorizon()
+PASS   : CalendarServiceTest::cleanupTestCase()
+Totals: 9 passed, 0 failed, 0 skipped, 0 blacklisted, 2ms
+********* Finished testing of CalendarServiceTest *********
+</system-out>
+	</testcase>
+	<testcase name="simulationengine" classname="simulationengine" time="1.48098" status="run">
+		<properties/>
+		<system-out>********* Start testing of SimulationEngineTest *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (arm64-little_endian-lp64 shared (dynamic) release build; by Apple LLVM 21.0.0 (clang-2100.1.1.101)), macos 26.5.1
+PASS   : SimulationEngineTest::initTestCase()
+PASS   : SimulationEngineTest::recurringSeminarsAreCreatedGraduallyAndRepeat()
+PASS   : SimulationEngineTest::seminarWeekendsAndConflictsAreHandled()
+PASS   : SimulationEngineTest::randomManagementMeetingUsesAppointedLeaders()
+PASS   : SimulationEngineTest::initialCalendarIsReadyBeforeFirstStep()
+PASS   : SimulationEngineTest::everyDepartmentMeetsEveryWorkday()
+PASS   : SimulationEngineTest::shortNoticeAndLifecycle()
+PASS   : SimulationEngineTest::generatedNoticeAndDiversity()
+PASS   : SimulationEngineTest::deterministicAcrossStepsAndReset()
+PASS   : SimulationEngineTest::calendarEventsCompleteWithoutPersonnelEffects()
+PASS   : SimulationEngineTest::cleanupTestCase()
+Totals: 11 passed, 0 failed, 0 skipped, 0 blacklisted, 1465ms
+********* Finished t...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="completion" classname="completion" time="3.06115" status="run">
+		<properties/>
+		<system-out>********* Start testing of CompletionTest *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (arm64-little_endian-lp64 shared (dynamic) release build; by Apple LLVM 21.0.0 (clang-2100.1.1.101)), macos 26.5.1
+PASS   : CompletionTest::initTestCase()
+PASS   : CompletionTest::seminarsSurviveSaveAndContinue()
+PASS   : CompletionTest::initialCalendarRoundTrip()
+PASS   : CompletionTest::remindersRepeatWithoutDuplicates()
+PASS   : CompletionTest::sentMailRetainsOriginalDetails()
+PASS   : CompletionTest::obsoleteModelsAreRejectedExplicitly()
+PASS   : CompletionTest::importanceChangesAndCancellation()
+PASS   : CompletionTest::rescheduleReplacesReminderSchedule()
+PASS   : CompletionTest::rejectSuggestAndAutomatic()
+PASS   : CompletionTest::staleSuggestionAndNoSlot()
+PASS   : CompletionTest::reportClipsOccupancyAndSeparatesOutcomes()
+PASS   : CompletionTest::saveLoadContinuationAndCorruption()
+PASS   : CompletionTest::horizonAndFuturePlans()
+PASS   : CompletionTest::reproducibilityAcrossStepsAndReset()
+PASS   : Com...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="calendarwindow" classname="calendarwindow" time="2.43064" status="run">
+		<properties/>
+		<system-out>********* Start testing of CalendarWindowTest *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (arm64-little_endian-lp64 shared (dynamic) release build; by Apple LLVM 21.0.0 (clang-2100.1.1.101)), macos 26.5.1
+PASS   : CalendarWindowTest::initTestCase()
+QWARN  : CalendarWindowTest::dailyHourFilterWorksInObservationMode() qt.qpa.fonts: Populating font family aliases took 21 ms. Replace uses of missing font family "Sans Serif" with one that exists to avoid this cost. 
+QWARN  : CalendarWindowTest::dailyHourFilterWorksInObservationMode() This plugin does not support propagateSizeHints()
+PASS   : CalendarWindowTest::dailyHourFilterWorksInObservationMode()
+QWARN  : CalendarWindowTest::groupedMailCanBeOpenedAndKeepsRepeatsSeparate() This plugin does not support propagateSizeHints()
+QWARN  : CalendarWindowTest::groupedMailCanBeOpenedAndKeepsRepeatsSeparate() This plugin does not support propagateSizeHints()
+QWARN  : CalendarWindowTest::groupedMailCanBeOpenedAndKeepsRepeatsSeparate() This plugin does not suppo...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+</testsuite>

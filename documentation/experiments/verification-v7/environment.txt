@@ -1,0 +1,14 @@
+Verification and experiment date: 2026-11-06
+Model generator: calendar-v7
+Platform: macOS ARM64
+Compiler: Apple Clang 21.0.0 (clang-2100.1.1.101)
+Qt: 6.11.2
+CMake: 4.4.3
+Python: 3.15.0
+Build: cmake --build build/reorganized -j2
+Tests: ctest --test-dir build/reorganized --output-on-failure
+Experiment: build/reorganized/modeling_experiments --output documentation/experiments/results-v7 --repetitions 20
+Tests: 4/4 CTest suites passed
+Experiment: 120/120 runs complete
+LaTeX compiler: Tectonic 0.17.0 (temporary executable)
+Report: documentation/report/report.pdf

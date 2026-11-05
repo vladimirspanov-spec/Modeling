@@ -1,0 +1,18 @@
+\resizebox{\linewidth}{!}{\begin{tikzpicture}
+\node[uml] (engine) at (0,0) {\underline{\shortstack[l]{engine :\\SimulationEngine}}\par\hrule\smallskip seed = 42\par modelVersion = calendar-v7\par шаг = 30 минут};
+\node[uml] (calendar) at (-5,-3.2) {\underline{\shortstack[l]{calendar :\\CalendarService}}\par\hrule\smallskip время = 12.10.2026 00:00\par active = исходные планы\par archive = пусто};
+\node[uml] (reminders) at (0,-3.2) {\underline{\shortstack[l]{reminders :\\ReminderService}}\par\hrule\smallskip pending = сроки напоминаний\par для начальных планов};
+\node[uml] (email) at (5,-3.2) {\underline{\shortstack[l]{email :\\SimulatedEmailChannel}}\par\hrule\smallskip messages = пусто\par отправки до первого шага нет};
+\draw[composition] (engine.south west)--(calendar.north);
+\draw[composition] (engine.south)--(reminders.north);
+\draw[composition] (engine.south east)--(email.north);
+\node[uml] (department) at (-5,-6.5) {\underline{d1 : Department}\par\hrule\smallskip id = 1\par name = «Отдел 1»\par leaderId = 1};
+\node[uml] (employee) at (0,-6.5) {\underline{e1 : Employee}\par\hrule\smallskip id = 1\par departmentId = 1\par publicId = «1\_01»};
+\node[uml] (event) at (5,-6.5) {\underline{p1 : CalendarEvent}\par\hrule\smallskip type = Planning\par start = 12.10.2026 09:00\par end = 09:30; roomId = 1\par status = Planned};
+\draw[dep] (calendar.south)--(department.north) node[midway,left] {каталог};
+\draw[dep] (department.south) -- ++(0,-0.75) -| (employee.south);
+\node[font=\footnotesize,fill=white] at (-2.5,-8.4) {руководитель};
+\draw[dep] (event.south) -- ++(0,-0.75) -| (employee.south);
+\node[font=\footnotesize,fill=white] at (2.5,-8.4) {участник};
+\draw[dep] (calendar.south east) -- ++(0,-0.4) -| (event.north);
+\end{tikzpicture}}
