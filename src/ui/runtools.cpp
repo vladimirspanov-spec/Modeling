@@ -157,7 +157,9 @@ void RunTools::refresh()
 {
     const auto selected = requests_->currentRow() >= 0 ? requests_->item(requests_->currentRow(), 0)->data(Qt::UserRole).toULongLong() : 0;
     requests_->setRowCount(0);
-    for (const auto &r : engine_.requests()) {
+    const auto &requests = engine_.requests();
+    for (auto it = requests.crbegin(); it != requests.crend(); ++it) {
+        const auto &r = *it;
         QString status = r.pending ? tr("Ожидает выбора") : r.selected ? tr("Вариант выбран, создана новая попытка") : r.result.ok() ? tr("Принята") : r.result.message;
         QStringList reasons;
         if (r.participantConflict) reasons.append(tr("заняты участники"));

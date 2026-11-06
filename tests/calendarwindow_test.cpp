@@ -212,9 +212,9 @@ private slots:
         auto *pause = automatic.findChild<QPushButton *>("pauseSimulation");
         auto *step = automatic.findChild<QPushButton *>("stepCalendar");
         QCOMPARE(timer->interval(), 100);
-        for (int index = 0; index < 4; ++index) {
+        for (int index = 0; index < 5; ++index) {
             speed->setCurrentIndex(index);
-            QCOMPARE(timer->interval(), QVector<int>({200, 100, 50, 20})[index]);
+            QCOMPARE(timer->interval(), QVector<int>({400, 200, 100, 50, 20})[index]);
         }
         int ticks = 0;
         auto connection = connect(timer, &QTimer::timeout, &automatic, [&] {
@@ -283,7 +283,10 @@ private slots:
         window.findChild<QPushButton *>("stepCalendar")->click();
         QVERIFY(window.simulationEngine().requests()[1].pending);
         QCOMPARE(window.calendarService().calendar().events.size(), 1);
-        window.findChild<QTableWidget *>("requestsTable")->selectRow(1);
+        auto *requests = window.findChild<QTableWidget *>("requestsTable");
+        QCOMPARE(requests->item(0, 0)->data(Qt::UserRole).toULongLong(), quint64(2));
+        QCOMPARE(requests->item(1, 0)->data(Qt::UserRole).toULongLong(), quint64(1));
+        requests->selectRow(0);
         auto *accept = window.findChild<QPushButton *>("acceptSuggestion");
         QVERIFY(accept->isEnabled());
         window.findChild<QPushButton *>("startSimulation")->click();
@@ -329,7 +332,7 @@ private slots:
         QVERIFY(engine.createEvent(data, {1,UserRole::Secretary,{}}).ok());
         QVERIFY(!engine.createEvent(data, {1,UserRole::Secretary,{}}).ok());
         SimulationWindow window(config); window.restoreState(std::move(engine));
-        window.findChild<QTableWidget *>("requestsTable")->selectRow(1);
+        window.findChild<QTableWidget *>("requestsTable")->selectRow(0);
         inDialog([](QDialog *dialog) {
             QCOMPARE(dialog->findChild<QLineEdit *>("eventTitle")->text(), QString("Draft"));
             dialog->findChild<QDateTimeEdit *>("eventStart")->setTime(QTime(12,0));

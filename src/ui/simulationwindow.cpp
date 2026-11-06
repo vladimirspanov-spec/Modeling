@@ -144,8 +144,8 @@ SimulationWindow::SimulationWindow(const CalendarSetup &setup, QWidget *parent)
     resetButton->setObjectName("resetSimulation");
     speed_ = new QComboBox(this);
     speed_->setObjectName("simulationSpeed");
-    for (double speed : {0.5, 1.0, 2.0, 5.0}) speed_->addItem(QString::number(speed) + QStringLiteral("×"), speed);
-    speed_->setCurrentIndex(1);
+    for (double speed : {0.25, 0.5, 1.0, 2.0, 5.0}) speed_->addItem(QString::number(speed) + QStringLiteral("×"), speed);
+    speed_->setCurrentIndex(speed_->findData(1.0));
     for (auto *button : {startButton_, pauseButton_, stepButton_, resetButton}) actions->addWidget(button);
     actions->addWidget(new QLabel(tr("Скорость"), this));
     actions->addWidget(speed_);
