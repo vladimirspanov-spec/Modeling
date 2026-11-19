@@ -22,7 +22,7 @@ qint64 workingSeconds(const CalendarSetup &setup, QDateTime start, QDateTime end
     }
     return total;
 }
-QString quoted(QString text) { text.replace('"', "\"\""); return '"' + text + '"'; }
+
 }
 QJsonObject SimulationReport::metrics(const SimulationEngine &engine)
 {
@@ -111,21 +111,52 @@ QJsonObject SimulationReport::create(const SimulationEngine &engine)
         {"departments", departments}};
 }
 
-QByteArray SimulationReport::csv(const QJsonObject &report)
+QJsonObject SimulationReport::userReport(const SimulationEngine &engine)
 {
-    QString out = QStringLiteral("section,key,value\n");
-    auto row = [&](const QString &section, const QString &key, const QString &value) { out += quoted(section) + ',' + quoted(key) + ',' + quoted(value) + '\n'; };
-    const auto metrics = report["metrics"].toObject();
-    for (auto it = metrics.begin(); it != metrics.end(); ++it) {
-        if (it.value().isDouble()) row("metrics", it.key(), QString::number(it.value().toDouble(), 'g', 15));
-        else if (it.value().isObject()) row("metrics", it.key(), QString::fromUtf8(QJsonDocument(it.value().toObject()).toJson(QJsonDocument::Compact)));
+    const auto &calendar = engine.calendar();
+    const auto &setup = engine.setup();
+    const auto &catalog = calendar.catalog();
+    const auto from = modelDateTime(setup.startDate);
+    const auto to = calendar.modelTime();
+    const QStringList types{QStringLiteral("Планёрка"), QStringLiteral("Совещание руководителей"),
+        QStringLiteral("Семинар"), QStringLiteral("Командировка"), QStringLiteral("Другая встреча")};
+    const QStringList importance{QStringLiteral("Низкая"), QStringLiteral("Средняя"), QStringLiteral("Высокая")};
+    const QStringList policies{"Reject", "Suggest", "AutoReschedule"};
+    auto person = [&](int id) {
+        const auto employee = catalog.employees.value(id);
+        return employee.name + QStringLiteral(" (%1)").arg(employee.publicId);
+    };
+    QJsonArray events;
+    CalendarFilter filter; filter.scope = CalendarScope::All;
+    for (const auto &event : calendar.calendar(filter).events) {
+        if (event.status != EventStatus::Completed && event.status != EventStatus::InProgress) continue;
+        const auto &data = event.data;
+        if (data.end <= from || data.start > to) continue;
+        QJsonArray participants;
+        for (int id : data.participantIds) participants.append(person(id));
+        const auto location = data.roomId ? catalog.rooms.value(*data.roomId).name :
+            data.type == EventType::BusinessTrip ? QStringLiteral("Вне офиса") : QStringLiteral("Не указано");
+        events.append(QJsonObject{{"id", QString::number(event.id)}, {"title", data.title},
+            {"type", types.at(int(data.type))}, {"start", data.start.toString(Qt::ISODate)},
+            {"end", data.end.toString(Qt::ISODate)}, {"location", location}, {"participants", participants},
+            {"organizer", person(data.organizerId)}, {"importance", importance.at(int(data.importance))},
+            {"status", event.status == EventStatus::Completed ? QStringLiteral("Завершено") : QStringLiteral("Идёт")}});
     }
-    for (const auto &section : {"events", "history", "requests", "emails", "log", "departments"}) {
-        int i = 0; for (const auto &entry : report[section].toArray()) row(section, QString::number(++i), QString::fromUtf8(QJsonDocument(entry.toObject()).toJson(QJsonDocument::Compact)));
-    }
-    for (const auto &entry : metrics["rooms"].toArray()) row("rooms", QString::number(entry.toObject()["roomId"].toInt()), QString::fromUtf8(QJsonDocument(entry.toObject()).toJson(QJsonDocument::Compact)));
-    return out.toUtf8();
+    const auto m = metrics(engine);
+    QJsonObject totals;
+    for (const auto *key : {"created", "started", "completed", "inProgress", "planned", "cancelled",
+                            "conflicts", "rescheduled", "autoRescheduled", "rejected", "emailsDelivered"})
+        totals[key] = m[key];
+    return {{"format", "SecretarySimulationReport"}, {"schemaVersion", 1}, {"finished", engine.finished()},
+        {"period", QJsonObject{{"from", from.toString(Qt::ISODate)}, {"to", to.toString(Qt::ISODate)},
+                              {"plannedEnd", calendar.horizonEnd().toString(Qt::ISODate)}}},
+        {"parameters", QJsonObject{{"days", setup.dayCount}, {"stepMinutes", setup.stepMinutes},
+            {"departments", setup.departmentCount}, {"employeesPerDepartment", setup.employeesPerDepartment},
+            {"seed", double(setup.seed)}, {"requestRatePerWorkday", setup.requestRatePerWorkday},
+            {"changeRatePerWorkday", setup.changeRatePerWorkday}, {"conflictPolicy", policies.at(int(setup.conflictPolicy))}}},
+        {"summary", totals}, {"events", events}};
 }
+
 QString SimulationReport::summary(const QJsonObject &m)
 {
     return QStringLiteral("Мероприятий: %1 · Началось: %2 · Завершено: %3 · Отменено: %4\nОжидают начала: %5 · Идут: %6\nЗаявок: %7 · Принято: %8 · Отказов: %9 · Ожидают решения: %10\nКонфликтных заявок: %11 · Переносов: %12 · Автопереносов: %13\nПисем отправлено / доставлено (имитация): %14 / %15\nЗанятость помещений в прошедшее рабочее время: %16%")

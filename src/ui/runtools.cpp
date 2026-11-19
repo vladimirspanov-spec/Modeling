@@ -118,16 +118,16 @@ RunTools::RunTools(SimulationEngine &engine, std::function<void()> pause, std::f
         if (path.isEmpty()) return;
         try { SimulationStore::save(path, engine_); } catch (const std::exception &e) { QMessageBox::warning(this, tr("Ошибка сохранения"), e.what()); }
     });
-    for (const auto &format : {QString("JSON"), QString("CSV")}) {
-        auto *button = new QPushButton(tr("Отчёт %1…").arg(format)); files->addWidget(button);
-        connect(button, &QPushButton::clicked, this, [this, format] {
-            pause_(); const auto path = QFileDialog::getSaveFileName(this, tr("Экспорт отчёта"), "report." + format.toLower(), format + " (*." + format.toLower() + ')');
-            if (path.isEmpty()) return;
-            try { const auto report = SimulationReport::create(engine_);
-                if (format == "JSON") JsonCodec::write(path, report); else JsonCodec::writeBytes(path, SimulationReport::csv(report));
-            } catch (const std::exception &e) { QMessageBox::warning(this, tr("Ошибка экспорта"), e.what()); }
-        });
-    }
+    auto *report = new QPushButton(tr("Сохранить отчёт JSON…"));
+    report->setObjectName("exportReportJson"); files->addWidget(report);
+    connect(report, &QPushButton::clicked, this, [this] {
+        pause_();
+        auto path = QFileDialog::getSaveFileName(this, tr("Сохранить отчёт"), "report.json", "JSON (*.json)");
+        if (path.isEmpty()) return;
+        if (!path.endsWith(".json", Qt::CaseInsensitive)) path += ".json";
+        try { JsonCodec::write(path, SimulationReport::userReport(engine_)); }
+        catch (const std::exception &e) { QMessageBox::warning(this, tr("Ошибка экспорта"), e.what()); }
+    });
     tabs->addTab(reportPage, tr("Итоги и сохранение"));
 }
 void RunTools::openEmail(int row)

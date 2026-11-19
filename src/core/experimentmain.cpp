@@ -21,7 +21,7 @@ int main(int argc, char **argv)
         if (!dir.mkpath(".")) throw std::runtime_error("Cannot create output directory");
         if (parser.isSet("replay")) {
             auto engine = SimulationStore::load(parser.value("replay"));
-            JsonCodec::write(dir.filePath("replayed-report.json"), SimulationReport::create(*engine));
+            JsonCodec::write(dir.filePath("replayed-report.json"), SimulationReport::userReport(*engine));
             return 0;
         }
         CalendarSetup setup;
@@ -41,9 +41,8 @@ int main(int argc, char **argv)
         SimulationEngine example(setup);
         while (!example.finished()) example.step();
         SimulationStore::save(dir.filePath("example-state.json"), example);
-        const auto report = SimulationReport::create(example);
+        const auto report = SimulationReport::userReport(example);
         JsonCodec::write(dir.filePath("example-report.json"), report);
-        JsonCodec::writeBytes(dir.filePath("example-report.csv"), SimulationReport::csv(report));
         return 0;
     } catch (const std::exception &e) { QTextStream(stderr) << e.what() << '\n'; return 1; }
 }

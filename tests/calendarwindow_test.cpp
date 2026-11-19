@@ -98,6 +98,8 @@ private slots:
         int pauses = 0;
         RunTools view(engine, [&] { ++pauses; }, [] {}, [] { return UserContext{1, UserRole::Secretary, {}}; }, [](EventId) {}, [](const RequestRecord &) {});
         view.refresh(); view.show();
+        QVERIFY(view.findChild<QPushButton *>("exportReportJson"));
+        for (auto *button : view.findChildren<QPushButton *>()) QVERIFY(!button->text().contains("CSV"));
         view.findChild<QTabWidget *>()->setCurrentIndex(1);
         auto *mail = view.findChild<QTableWidget *>("emailsTable");
         auto *open = view.findChild<QPushButton *>("openEmail");

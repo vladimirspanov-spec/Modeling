@@ -12,7 +12,7 @@
 \node[uml] (resolver) at (-5,-7.4) {\textbf{ConflictResolver}\par\hrule\smallskip static alternatives(calendar,\par setup, requested, actor, id)};
 \draw[dep] (engine.west)--++(-3.1,0)--++(-4.4,0)|-(resolver.west);
 \draw[dep] (resolver.north)--(calendar.south);
-\node[uml] (report) at (-5,-10.6) {\textbf{SimulationReport}\par\hrule\smallskip create(), metrics(), csv()\par summary()};
+\node[uml] (report) at (-5,-10.6) {\textbf{SimulationReport}\par\hrule\smallskip userReport(), create(), metrics()\par summary()};
 \node[uml] (store) at (0,-10.6) {\textbf{SimulationStore}\par\hrule\smallskip snapshot(), restore()\par save(), load()};
 \node[uml] (runner) at (5,-10.6) {\textbf{ExperimentRunner}\par\hrule\smallskip current: unique\_ptr<Engine>\par comparison(), advance()\par report(), csv()};
 \end{tikzpicture}}

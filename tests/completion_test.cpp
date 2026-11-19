@@ -5,6 +5,7 @@
 #include "src/core/experimentrunner.h"
 #include <QtTest>
 #include <QTemporaryDir>
+#include <QJsonDocument>
 
 namespace {
 CalendarSetup config() {
@@ -152,9 +153,34 @@ private slots:
         QCOMPARE(metrics["created"].toInt(),1); QCOMPARE(metrics["rejected"].toInt(),1); QCOMPARE(metrics["conflicts"].toInt(),1);
         QCOMPARE(metrics["rooms"].toArray().first().toObject()["busySeconds"].toDouble(),1800.0);
         until(e,data.end); QCOMPARE(SimulationReport::metrics(e)["completed"].toInt(),1);
-        const auto csv = SimulationReport::csv(SimulationReport::create(e)); QVERIFY(csv.contains("\"\"title\"\""));
-        // CSV encloses JSON in a quoted cell; quotes inside that cell must be doubled.
-        QVERIFY(csv.contains(QByteArray("\\") + "\"\"quoted" + "\\" + "\"\""));
+    }
+    void compactReportContainsOnlyOccurredEvents() {
+        auto s = config(); SimulationEngine engine(s);
+        auto event = meeting(s);
+        QVERIFY(engine.createEvent(event, actor()).ok());
+        event.title = "Future"; event.start = event.start.addDays(20); event.end = event.end.addDays(20);
+        QVERIFY(engine.createEvent(event, actor()).ok());
+        event = meeting(s, 12); event.title = "Cancelled";
+        const auto cancelled = engine.createEvent(event, actor()); QVERIFY(cancelled.ok());
+        QVERIFY(engine.cancelEvent(cancelled.eventId, actor()).ok());
+        QVERIFY(SimulationReport::userReport(engine)["events"].toArray().isEmpty());
+        until(engine, modelDateTime(s.startDate, QTime(10,30)));
+        auto report = SimulationReport::userReport(engine);
+        QCOMPARE(report["events"].toArray().size(), 1);
+        QCOMPARE(report["events"].toArray().first().toObject()["status"].toString(), QString::fromUtf8("Идёт"));
+        until(engine, engine.calendar().horizonEnd());
+        report = SimulationReport::userReport(engine);
+        QVERIFY(report["finished"].toBool());
+        QCOMPARE(report["events"].toArray().size(), 1);
+        const auto actual = report["events"].toArray().first().toObject();
+        QCOMPARE(actual["location"].toString(), engine.calendar().catalog().rooms.value(1).name);
+        QCOMPARE(actual["participants"].toArray().size(), 2);
+        QCOMPARE(actual["status"].toString(), QString::fromUtf8("Завершено"));
+        for (const auto *key : {"history", "requests", "emails", "log", "commands", "employees"})
+            QVERIFY(!report.contains(key));
+        QVERIFY(QJsonDocument(report).toJson().size() < QJsonDocument(SimulationReport::create(engine)).toJson().size()/2);
+        auto restored = SimulationStore::restore(SimulationStore::snapshot(engine));
+        QCOMPARE(SimulationReport::userReport(*restored), report);
     }
     void saveLoadContinuationAndCorruption() {
         auto s = config(); s.requestRatePerWorkday = 12; s.changeRatePerWorkday = 2;
